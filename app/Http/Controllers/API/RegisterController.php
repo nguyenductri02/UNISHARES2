@@ -1,0 +1,123 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\API\BaseController as BaseController;
+use Illuminate\Support\Facades\lang;
+   
+class RegisterController extends BaseController
+{
+    /**
+     * Register api
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function register(Request $request)
+    {
+        $messages = lang::get('messages');
+    
+        $validator = Validator::make($request->all(), [
+            'user_name' => 'required',
+            'phone' => 'required|digits:10|unique:users,phone',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required',
+            'c_password' => 'required|same:password',
+            'role' => 'required|in:1,2'       
+        ],$messages);
+   
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $input = $request->all();
+        $input['password'] = bcrypt($input['password']);
+        $user = User::create([
+            'user_name' => $input['user_name'],
+            'phone'     => $input['phone'],
+            'email'     => $input['email'],
+            'password'  => $input['password'],
+            'role'      => $input['role'],
+            'address'   => $input['address'],
+        ]);
+        $success['token'] =  $user->createToken('MyApp')->plainTextToken;
+        $success['name'] =  $user->user_name;
+   
+        return $this->sendResponse($success, 'User register successfully.');
+    } 
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$success['token'] =  $user->createToken('MyApp')->plainTextToken; 
+//$user->createToken('MyApp'): tao 1 token moi 
+// ->plainTextToken;  su dung duoc ngay
+//'MyApp': teen token   
+//success : thanh cong
+//required: yeu cau
+//unique: doc nhat
+//tìm kiếm một file ngôn ngữ có tên messages.php trong thư mục resources/lang/vi/.
+//validator trình sử lý
+// $input = $request->all();: Lấy tất cả dữ liệu được gửi từ request (Postman hoặc frontend) vào biến $input.
+// $user = User::create // tao 1 usermoi trong database
