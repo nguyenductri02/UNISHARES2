@@ -26,7 +26,8 @@ return new class extends Migration
             $table->string('university')                        ->nullable();
             $table->string('major')                             ->nullable();
             $table->string('profile_picture_url')               ->nullable();
-            $table->boolean('is_verified')                      ->default(false);
+            // $table->boolean('is_verified')                      ->default(false);
+            $table->char('is_verified', 1)                           ->default(1);
             $table->string('code')                              ->nullable();  
             $table->timestamp('time_code')                      ->nullable(); 
             $table->integer('contribution_points')              ->default(0);
@@ -45,3 +46,12 @@ return new class extends Migration
         Schema::dropIfExists('sessions');
     }
 };
+
+
+// 'major' => 'nullable|string|max:255', → Ngành học 
+
+// 'profile_picture_url' => 'nullable|url', → URL ảnh đại diện 
+
+// 'is_verified' => 'boolean', → Trạng thái xác thực 
+
+// 'contribution_points' => 'integer|min:0', → Điểm đóng góp 
