@@ -27,6 +27,10 @@ Route::controller(RegisterController::class)->group(function(){
 Route::controller(LoginController::class)->group(function(){    
     Route::post('login', 'login');    
 });
+Route::get('/login', function () {
+    return response()->json(['error' => 'Unauthorized'], 401);
+})->name('login');
+
 
 /**
      * Logout api
@@ -34,6 +38,9 @@ Route::controller(LoginController::class)->group(function(){
 Route::controller(LogoutController::class)->group(function(){   
     Route::post('logout',  'logout');
 });
+
+
+
 
 Route::controller(ForgotPasswordController::class)->group(function(){   
     Route::post('sendResetCode',  'sendResetCode');
@@ -50,34 +57,35 @@ Route::middleware('auth:sanctum')->group( function () {
 /**
      * phan trang user
 */
-Route::controller(GetUsersController::class)->group(function(){
+Route::middleware(['auth:sanctum'])->controller(GetUsersController::class)->group(function(){
     Route::get('getUsers', 'getUsers');
 });
 
 /**
      * tim kiem user
 */
-Route::controller(SearchUserController::class)->group(function(){
-    Route::post('searchUser', 'searchUser');
+Route::middleware(['auth:sanctum'])->controller(SearchUserController::class)->group(function(){
+    Route::get('searchUser', 'searchUser');
 });
 
 /**
      * tao moi user
 */
-Route::controller(CreateUserController::class)->group(function(){
+Route::middleware(['auth:sanctum'])->controller(CreateUserController::class)->group(function(){
     Route::post('createUser', 'createUser');     
 });
 
 /**
      * update user
 */
-Route::controller(UpdateUsersController::class)->group(function(){   
-    Route::put('updateUser/{id}', 'updateUser');
+Route::middleware(['auth:sanctum'])->controller(UpdateUsersController::class)->group(function(){   
+    Route::post('updateUser/{id}', 'updateUser');
 });
 
 /**
      * delete user
 */
-Route::controller(DeleteUsersController::class)->group(function(){    
+Route::middleware(['auth:sanctum'])->controller(DeleteUsersController::class)->group(function(){    
     Route::delete('deleteUser/{id}', 'deleteUser');
 });
+
