@@ -11,6 +11,9 @@ use App\Http\Controllers\API\BaseController as BaseController;
 
 class FileController extends BaseController
 {
+     /**
+     * upload file.
+     */
     public function filesUpload(Request $req, $id)
     {
         $currentUser = Auth::user();

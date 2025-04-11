@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\lang;
 class RegisterController extends BaseController
 {
     /**
-     * Register api
+     * tạo tài khoản 
      *
      * @return \Illuminate\Http\Response
      */

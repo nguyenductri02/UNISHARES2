@@ -13,6 +13,9 @@ use App\Http\Controllers\API\BaseController as BaseController;
 
 class AvatarController extends BaseController
 {
+     /**
+     * upload avatar user.
+     */
     public function avatarUpload(Request $req, $id)
     {
         $currentUser = Auth::user();// lấy thông tin người dùng đang nhập

@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Auth;
 
 class ShowUserController extends Controller
 {
+     /**
+     * hiển thị thông tin cá nhân.
+     */
     public function showUser(Request $request)
     {
         $user = Auth::user();

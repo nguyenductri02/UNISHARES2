@@ -12,6 +12,9 @@ use App\Http\Controllers\API\BaseController as BaseController;
 
 class UpdateUsersController extends BaseController
 {
+     /**
+     * cập nhật lại thông tin user.
+     */
     public function updateUser(Request $request, $id)
     {
         $currentUser = Auth::user(); // ktra quyen
@@ -30,17 +33,11 @@ class UpdateUsersController extends BaseController
         }
 
         $validator = Validator::make($request->all(), [
-            //'user_name'          => 'sometimes|required',
             'full_name'          => 'sometimes|required',
-            // 'email'              => "sometimes|email|unique:users,email,{$id}",
             'password'           => 'sometimes|min:6',
             'phone'              => "sometimes|digits:10|unique:users,phone,{$id}",
             'address'            => 'nullable|string|max:255',
             'dob'                => 'nullable|string|max:255',
-            // 'full_name'          => 'nullable|string|max:255',
-            // 'university'         => 'nullable|string|max:255',
-            // 'major'              => 'nullable|string|max:255',
-            // 'profile_picture_url'=> 'nullable|url',
             'gender'                => 'nullable|string|max:255',
             
         ]);
