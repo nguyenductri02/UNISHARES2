@@ -85,9 +85,9 @@ Route::middleware(['auth:sanctum'])->controller(CreateUserController::class)->gr
 /**
      * update user
 */
-Route::middleware(['auth:sanctum'])->controller(UpdateUsersController::class)->group(function(){   
-    Route::post('updateUser/{id}', 'updateUser');
-});
+// Route::middleware(['auth:sanctum'])->controller(UpdateUsersController::class)->group(function(){   
+//     Route::post('updateUser/{id}', 'updateUser');
+// });
 
 /**
      * delete user
