@@ -14,10 +14,11 @@ use App\Http\Controllers\API\User\AvatarController;
 use App\Http\Controllers\API\User\GetUsersController;
 use App\Http\Controllers\API\User\ShowUserController;
 use App\Http\Controllers\API\ForgotPasswordController;
-use App\Http\Controllers\Api\User\CreateUserController;
 use App\Http\Controllers\API\User\SearchUserController;
 use App\Http\Controllers\API\User\DeleteUsersController;
-use App\Http\Controllers\API\User\UpdateUsersController;
+use App\Http\Controllers\Api\User\CreateAccountUserController;
+use App\Http\Controllers\API\User\UpdateProfileUserController;
+
 
 /**
      * Register api
@@ -78,16 +79,16 @@ Route::middleware(['auth:sanctum'])->controller(SearchUserController::class)->gr
 /**
      * tao moi user
 */
-Route::middleware(['auth:sanctum'])->controller(CreateUserController::class)->group(function(){
+Route::middleware(['auth:sanctum'])->controller(CreateAccountUserController::class)->group(function(){
     Route::post('createUser', 'createUser');     
 });
 
 /**
      * update user
 */
-// Route::middleware(['auth:sanctum'])->controller(UpdateUsersController::class)->group(function(){   
-//     Route::post('updateUser/{id}', 'updateUser');
-// });
+Route::middleware(['auth:sanctum'])->controller(UpdateProfileUserController::class)->group(function(){   
+    Route::post('updateUser/{id}', 'updateUser');
+});
 
 /**
      * delete user
