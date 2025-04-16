@@ -5,7 +5,6 @@ use Illuminate\Support\Facades\Route;
 
 use Illuminate\Support\Facades\Response;
 use App\Http\Controllers\Api\DemoController;
-use App\Http\Controllers\API\FileController;
 use App\Http\Controllers\API\LoginController;
 use App\Http\Controllers\API\LogoutController;
 use App\Http\Controllers\API\ProductController;
@@ -15,9 +14,16 @@ use App\Http\Controllers\API\User\GetUsersController;
 use App\Http\Controllers\API\User\ShowUserController;
 use App\Http\Controllers\API\ForgotPasswordController;
 use App\Http\Controllers\API\User\SearchUserController;
+use App\Http\Controllers\API\User\CommentUserController;
 use App\Http\Controllers\API\User\DeleteUsersController;
+use App\Http\Controllers\API\User\DeleteFileUserController;
+use App\Http\Controllers\API\User\UploadFileUserController;
+use App\Http\Controllers\API\User\DownloadFileUerController;
+use App\Http\Controllers\API\User\DownloadFileUserController;
 use App\Http\Controllers\Api\User\CreateAccountUserController;
+use App\Http\Controllers\API\User\RatingCommentUserController;
 use App\Http\Controllers\API\User\UpdateProfileUserController;
+use App\Http\Controllers\API\User\RatingDocumentUserController;
 
 
 /**
@@ -129,7 +135,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('filesUpload/{id}', [FileController::class, 'filesUpload']);
+Route::post('filesUpload/{id}', [UploadFileUserController::class, 'filesUpload']);
 
 
 Route::get('/user_file/{filename}', function ($filename) {
@@ -145,6 +151,32 @@ Route::get('/user_file/{filename}', function ($filename) {
     return Response::make($file, 200)->header("Content-Type", $type);
 });
 
+/**
+     * download files
+*/
+Route::controller(DownloadFileUserController::class)->group(function () {
+    Route::get('downloadFile/{filename}', 'downloadFile');
+});
+
+/**
+     * delete files
+*/
+Route::middleware('auth:sanctum')->controller(DeleteFileUserController::class)->group(function () {
+    Route::delete('deleteFile/{id}', 'deleteFile');
+});
+/**
+     * cmt
+*/
+Route::middleware('auth:sanctum')->controller(CommentUserController::class)->group(function () {
+    Route::post('comment/{document_id}', 'comment');
+});
+
+/**
+     * rating documents
+*/
+Route::middleware('auth:sanctum')->controller(RatingDocumentUserController::class)->group(function () {
+    Route::post('rateDocument/{document_id}', 'rate');
+});
 /**
      * show thong tin nguoi dung
 */
