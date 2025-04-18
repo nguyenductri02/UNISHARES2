@@ -15,8 +15,7 @@ class RatingDocumentUserController extends Controller
     public function rate(Request $request, $document_id)
     {
         $user = Auth::user();
-
-        // Kiểm tra tài liệu có tồn tại không
+        
         $document = Document::find($document_id);
         if (!$document) {
             return response()->json([
@@ -24,15 +23,13 @@ class RatingDocumentUserController extends Controller
                 'message' => 'Document not found'
             ], 404);
         }
-
-        // Validate rating đầu vào
+        
         $request->validate([
             'rating' => 'required|integer|min:1|max:5'
         ]);
 
         $newRating = $request->input('rating');
-
-        // Tính lại rating trung bình
+       
         $totalRating = $document->rating * $document->rating_count;
         $totalRating += $newRating;
         $document->rating_count += 1;

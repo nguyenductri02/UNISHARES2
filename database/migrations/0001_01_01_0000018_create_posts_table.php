@@ -17,6 +17,8 @@ return new class extends Migration
             $table->char('activity_type', 1)->default(1); 
             $table->integer('reference_id')->nullable(); 
             $table->integer('points')->default(0); 
+            $table->string('title')->nullable();
+            $table->text('content')->nullable();
             $table->timestamps(); 
         });
     }

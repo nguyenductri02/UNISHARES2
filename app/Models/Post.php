@@ -9,5 +9,12 @@ class Post extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['Avatar'];
+    protected $fillable = [
+        'user_id',
+        'activity_type',
+        'reference_id',
+        'points',
+        'title',
+        'content',
+    ];
 }

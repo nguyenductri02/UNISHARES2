@@ -21,7 +21,7 @@ class RegisterController extends BaseController
     
         $validator = Validator::make($request->all(), [
             //'user_name' => 'required',
-            'full_name' => 'required',
+            'full_name'  => ['required', 'regex:/^[\pL\s]+$/u', 'max:255'],
             'phone' => 'required|digits:10|unique:users,phone',
             'email' => 'required|email|unique:users,email',
             'password' => 'required',
@@ -32,10 +32,13 @@ class RegisterController extends BaseController
         ],$messages);
    
         if($validator->fails()){
-            return $this->sendError('Validation Error.', $validator->errors());       
+            return $this->sendError('Validation Error.', $validator->errors());
         }
         
-        $input = $request->all();
+        $input = $request->only(['full_name', 'phone', 'email', 'password', 'role']);
+        
+        $input['full_name'] = ucwords(strtolower(trim($input['full_name'])));//chuẩn hóa tên người dùng
+        
         $input['password'] = bcrypt($input['password']);
         $user = User::create([
             //'user_name' => $input['user_name'],
@@ -47,7 +50,7 @@ class RegisterController extends BaseController
             //'address'   => $input['address'],
             // 'dob'   => $input['dob'],
         ]);
-        $success['token'] =  $user->createToken('MyApp')->plainTextToken;
+        $success['token'] = $user->createToken('MyApp')->plainTextToken;
         // $success['name'] =  $user->user_name;
         $success['name'] =  $user->full_name;
    

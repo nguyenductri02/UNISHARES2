@@ -1,11 +1,15 @@
 <?php
 
 return [
+    'full_name' => [
+        'required' => 'Vui lòng nhập họ tên.',
+        'regex' => 'Họ tên chỉ được chứa chữ cái và khoảng trắng.',
+    ],
     'email' => [
         'required' => 'Email không được để trống.',
         'email' => 'Email phải đúng định dạng.',
-        'unique' => 'Email này đã được sử dụng.',
-    ],
+        'unique' => 'Email này đã được sử dụng.',    ],
+    
     'phone' => [
         'required' => 'Số điện thoại không được để trống.',
         'digits' => 'Số điện thoại phải có đúng 10 chữ số.',
@@ -31,14 +35,6 @@ return [
     ],
   
 ];
-
-// 'full_name'  => 'nullable|string|max:255',
-//             'university' => 'nullable|string|max:255',
-//             'major'      => 'nullable|string|max:255',
-//             'profile_picture_url' => 'nullable|url',
-//             'is_verified' => 'boolean',
-//             'contribution_points' => 'nullable|integer|min:0',
-//             //'avatar'     => 'nullable|image|max:2048'
-        
+ 
             
  

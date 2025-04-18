@@ -9,31 +9,31 @@ use App\Http\Controllers\API\BaseController as BaseController;
 
 class DeleteUsersController extends BaseController
 {
-    /**
-     * Xóa user.
-     */
+    // /**
+    //  * Xóa user.
+    //  */
     
-    public function deleteUser($id)
-    {
-        // Lấy user hiện tại
-        $currentUser = Auth::user();
+    // public function deleteUser($id)
+    // {
+    //     // Lấy user hiện tại
+    //     $currentUser = Auth::user();
 
-        // Kiểm tra quyền: chỉ role 2 được phép
-        if ($currentUser->role != 2) {
-            return $this->sendError(
-                'Unauthorized',
-                ['error' => 'Only admins can delete users'],
-                403
-            );
-        }
+    //     // Kiểm tra quyền: chỉ role 2 được phép
+    //     if ($currentUser->role != 2) {
+    //         return $this->sendError(
+    //             'Unauthorized',
+    //             ['error' => 'Only admins can delete users'],
+    //             403
+    //         );
+    //     }
 
-        $user = User::find($id);
-        if (!$user) {
-            return $this->sendError('User not found', [], 404);
-        }
+    //     $user = User::find($id);
+    //     if (!$user) {
+    //         return $this->sendError('User not found', [], 404);
+    //     }
 
-        $user->delete();
+    //     $user->delete();
 
-        return $this->sendResponse(null, 'User deleted successfully');
-    }
+    //     return $this->sendResponse(null, 'User deleted successfully');
+    // }
 }

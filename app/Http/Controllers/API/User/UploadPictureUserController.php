@@ -2,16 +2,12 @@
 
 namespace App\Http\Controllers\API\User;
 
-use App\Models\Post;
 use Illuminate\Http\Request;
-use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\BaseController as BaseController;
 
-class AvatarController extends BaseController
+class UploadPictureUserController extends BaseController
 {
      /**
      * upload avatar user.

@@ -9,21 +9,28 @@ use App\Http\Controllers\API\LoginController;
 use App\Http\Controllers\API\LogoutController;
 use App\Http\Controllers\API\ProductController;
 use App\Http\Controllers\API\RegisterController;
-use App\Http\Controllers\API\User\AvatarController;
 use App\Http\Controllers\API\User\GetUsersController;
 use App\Http\Controllers\API\User\ShowUserController;
 use App\Http\Controllers\API\ForgotPasswordController;
 use App\Http\Controllers\API\User\SearchUserController;
 use App\Http\Controllers\API\User\CommentUserController;
 use App\Http\Controllers\API\User\DeleteUsersController;
+
+use App\Http\Controllers\API\User\MyGroupUserController;
+use App\Http\Controllers\API\User\ShowGroupUserController;
 use App\Http\Controllers\API\User\DeleteFileUserController;
+
+use App\Http\Controllers\API\User\GroupStudyUserController;
+use App\Http\Controllers\API\User\MyDocumentUserController;
 use App\Http\Controllers\API\User\UploadFileUserController;
-use App\Http\Controllers\API\User\DownloadFileUerController;
+use App\Http\Controllers\API\User\PostArticleUserController;
 use App\Http\Controllers\API\User\DownloadFileUserController;
 use App\Http\Controllers\Api\User\CreateAccountUserController;
-use App\Http\Controllers\API\User\RatingCommentUserController;
 use App\Http\Controllers\API\User\UpdateProfileUserController;
+use App\Http\Controllers\API\User\UploadPictureUserController;
 use App\Http\Controllers\API\User\RatingDocumentUserController;
+use App\Http\Controllers\API\User\UploadFileHistoryUserController;
+use App\Http\Controllers\API\User\ReportDocumentPostUserController;
 
 
 /**
@@ -111,7 +118,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('avatarUpload/{id}', [AvatarController::class, 'avatarUpload']);
+Route::post('avatarUpload/{id}', [UploadPictureUserController::class, 'avatarUpload']);
 
 
 Route::get('/user_img/{filename}', function ($filename) {
@@ -191,3 +198,53 @@ Route::controller(DemoController::class)->group(function () {
     Route::get('searchDocuments', 'searchDocuments');
     Route::get('searchGroups', 'searchGroups');
 });
+
+/**
+     * up post
+*/
+Route::middleware('auth:sanctum')->controller(PostArticleUserController::class)->group(function () {
+    Route::post('postArticle', 'postArticle');
+});
+
+/**
+     * report document
+*/
+
+Route::controller(ReportDocumentPostUserController::class)->group(function () {
+    Route::post('report', 'report'); 
+});
+
+/**
+     * joinGroup study
+*/
+Route::controller(GroupStudyUserController::class)->group(function () {
+    Route::post('joinGroup', 'joinGroup'); 
+});
+
+/**
+     * show all group
+*/
+Route::controller(ShowGroupUserController::class)->group(function(){
+    Route::get('showgroups', 'showgroups');
+});
+
+/**
+     * show group my join
+*/
+
+Route::middleware('auth:sanctum')->controller(MyGroupUserController::class)->group(function () {
+    Route::get('myGroups', 'myGroups');
+});
+
+/**
+     * show group my Document
+*/
+
+Route::middleware('auth:sanctum')->controller(MyDocumentUserController::class)->group(function () {
+    Route::get('myDocuments', 'myDocuments');
+});
+
+/**
+     * upload file history
+*/
+Route::middleware('auth:sanctum')->get('upload-history', [UploadFileHistoryUserController::class, 'uploadHistory']);
