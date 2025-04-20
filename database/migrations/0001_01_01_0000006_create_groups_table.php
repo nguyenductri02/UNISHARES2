@@ -11,13 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
+        Schema::dropIfExists('groups');
         Schema::create('groups', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->text('description')                     ->nullable();
-            $table->string('subject')                       ->nullable();
-            $table->string('university')                    ->nullable();
-            $table->foreignId('created_by')->constrained('users');
+            $table->text('description')->nullable();
+            $table->string('avatar')->nullable();
+            $table->string('cover_image')->nullable();
+            $table->foreignId('creator_id')->constrained('users')->onDelete('cascade');
+            $table->string('course_code')->nullable();
+            $table->string('university')->nullable();
+            $table->string('department')->nullable();
+            $table->enum('type', ['public', 'private', 'course'])->default('public');
+            $table->boolean('requires_approval')->default(false);
+            $table->integer('member_count')->default(1);
             $table->timestamps();
         });
     }

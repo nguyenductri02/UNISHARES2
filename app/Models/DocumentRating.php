@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class GroupMember extends Model
+class DocumentRating extends Model
 {
     use HasFactory;
 
@@ -15,11 +15,10 @@ class GroupMember extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'group_id',
+        'document_id',
         'user_id',
-        'role',
-        'status',
-        'joined_at',
+        'rating',
+        'review',
     ];
 
     /**
@@ -28,19 +27,19 @@ class GroupMember extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'joined_at' => 'datetime',
+        'rating' => 'integer',
     ];
 
     /**
-     * Get the group that the membership belongs to.
+     * Get the document that was rated.
      */
-    public function group()
+    public function document()
     {
-        return $this->belongsTo(Group::class);
+        return $this->belongsTo(Document::class);
     }
 
     /**
-     * Get the user that the membership belongs to.
+     * Get the user who rated the document.
      */
     public function user()
     {

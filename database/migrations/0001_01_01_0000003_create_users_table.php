@@ -11,26 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
+        Schema::dropIfExists('users');
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            //$table->string('user_name')                    ->nullable();
-            $table->string('full_name');
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->string('email')                             ->unique();
-            $table->string('phone');
-            $table->string('address')                           ->nullable();
-            $table->date('dob')                                 ->nullable();
-            $table->char('role', 1)                           ->default(1);
-            $table->string('gender')                        ->nullable();
-            $table->string('university')                        ->nullable();
-            $table->string('major')                             ->nullable();
-            $table->string('profile_picture_url')               ->nullable();
-            $table->char('is_verified', 1)                      ->default(1);
-            $table->string('code')                              ->nullable();
-            $table->timestamp('time_code')                      ->nullable();
-            $table->integer('contribution_points')              ->default(0);
             $table->string('avatar')->nullable();
-            $table->string('files')->nullable();
+            $table->string('bio', 500)->nullable();
+            $table->string('university')->nullable();
+            $table->string('department')->nullable();
+            $table->string('student_id')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->rememberToken();
             $table->timestamps();
         });
     }
@@ -41,16 +35,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
-        Schema::dropIfExists('sessions');
     }
 };
 
-
-// 'major' => 'nullable|string|max:255', → Ngành học 
-
-// 'profile_picture_url' => 'nullable|url', → URL ảnh đại diện 
-
-// 'is_verified' => 'boolean', → Trạng thái xác thực 
-
-// 'contribution_points' => 'integer|min:0', → Điểm đóng góp 

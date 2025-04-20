@@ -4,7 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 use Illuminate\Support\Facades\Response;
-use App\Http\Controllers\Api\DemoController;
+
 use App\Http\Controllers\API\LoginController;
 use App\Http\Controllers\API\LogoutController;
 use App\Http\Controllers\API\ProductController;
@@ -31,6 +31,7 @@ use App\Http\Controllers\API\User\UploadPictureUserController;
 use App\Http\Controllers\API\User\RatingDocumentUserController;
 use App\Http\Controllers\API\User\UploadFileHistoryUserController;
 use App\Http\Controllers\API\User\ReportDocumentPostUserController;
+use App\Http\Controllers\API\Student\DemoController;
 
 
 /**
@@ -191,13 +192,6 @@ Route::controller(ShowUserController::class)->group(function () {
     Route::get('showUser', 'showUser'); 
 });
 
-/**
-     * search documents, groups
-*/
-Route::controller(DemoController::class)->group(function () {
-    Route::get('searchDocuments', 'searchDocuments');
-    Route::get('searchGroups', 'searchGroups');
-});
 
 /**
      * up post
@@ -248,3 +242,18 @@ Route::middleware('auth:sanctum')->controller(MyDocumentUserController::class)->
      * upload file history
 */
 Route::middleware('auth:sanctum')->get('upload-history', [UploadFileHistoryUserController::class, 'uploadHistory']);
+
+
+
+
+ // API cho sinh viên
+ Route::prefix('student')->group(function () {
+    Route::get('/documents', [DemoController::class, 'index']);
+    Route::get('/my-documents', [DemoController::class, 'myDocuments']);
+    Route::post('/documents', [DemoController::class, 'store']);
+    Route::get('/documents/{document}', [DemoController::class, 'show']);
+    Route::put('/documents/{document}', [DemoController::class, 'update']);
+    Route::delete('/documents/{document}', [DemoController::class, 'destroy']);
+    Route::get('/documents/{document}/download', [DemoController::class, 'download']);
+    Route::post('/documents/{document}/report', [DemoController::class, 'report']);
+});

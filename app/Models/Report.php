@@ -2,44 +2,51 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Report extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'reported_by',
-        'reported_user',
-        'document_id',
-        'comment_id',
-        'message_id',
+        'user_id',
+        'reportable_type',
+        'reportable_id',
         'reason',
-        'status_reports',
+        'details',
+        'status',
+        'resolved_by',
+        'resolution_note',
+        'resolved_at',
     ];
-    public function reportedBy()
+
+    protected $casts = [
+        'resolved_at' => 'datetime',
+    ];
+
+    /**
+     * Lấy người dùng báo cáo
+     */
+    public function user()
     {
-        return $this->belongsTo(User::class, 'reported_by');
+        return $this->belongsTo(User::class);
     }
 
-    public function reportedUser()
+    /**
+     * Lấy người dùng xử lý báo cáo
+     */
+    public function resolver()
     {
-        return $this->belongsTo(User::class, 'reported_user');
+        return $this->belongsTo(User::class, 'resolved_by');
     }
 
-    public function document()
+    /**
+     * Lấy đối tượng báo cáo
+     */
+    public function reportable()
     {
-        return $this->belongsTo(Document::class, 'document_id');
-    }
-
-    public function comment()
-    {
-        return $this->belongsTo(Comment::class, 'comment_id');
-    }
-
-    public function message()
-    {
-        return $this->belongsTo(Message::class, 'message_id');
+        return $this->morphTo();
     }
 }
