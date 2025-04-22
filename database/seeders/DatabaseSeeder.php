@@ -6,20 +6,20 @@ use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-// class DatabaseSeeder extends Seeder
-// {
-//     /**
-//      * Seed the application's database.
-//      */
-//     public function run(): void
-//     {
-//         $this->call([
-//             RoleAndPermissionSeeder::class,
-//             UserSeeder::class,
-//             GroupSeeder::class,
-//             DocumentSeeder::class,
-//             PostSeeder::class,
-//             ChatSeeder::class,
-//         ]);
-//     }
-// }
+class DatabaseSeeder extends Seeder
+{
+    /**
+     * Seed the application's database.
+     */
+    public function run(): void
+    {
+        $this->call([
+            RoleAndPermissionSeeder::class,
+            UserSeeder::class,
+            GroupSeeder::class,
+            DocumentSeeder::class,
+            PostSeeder::class,
+            ChatSeeder::class,
+        ]);
+    }
+}
