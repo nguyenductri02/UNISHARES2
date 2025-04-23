@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -17,10 +16,11 @@ class UserSeeder extends Seeder
         // Create admin user
         $admin = User::create([
             'name' => 'Admin User',
-            'email' => 'admin@unishare.com',
+            'email' => 'admin@dtu.vn',
+            'phone' => '0971234567',
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
-            'university' => 'UniShare University',
+            'university' => 'Duy Tan University',
             'department' => 'Administration',
             'is_active' => true,
         ]);
@@ -29,10 +29,11 @@ class UserSeeder extends Seeder
         // Create moderator user
         $moderator = User::create([
             'name' => 'Moderator User',
-            'email' => 'moderator@unishare.com',
+            'email' => 'moderator@dtu.vn',
+            'phone' => '0971234565',
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
-            'university' => 'UniShare University',
+            'university' => 'Duy Tan University',
             'department' => 'Content Moderation',
             'is_active' => true,
         ]);
@@ -41,10 +42,11 @@ class UserSeeder extends Seeder
         // Create lecturer user
         $lecturer = User::create([
             'name' => 'Lecturer User',
-            'email' => 'lecturer@unishare.com',
+            'email' => 'lecturer@dtu.vn',
+            'phone' => '0971234568',
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
-            'university' => 'UniShare University',
+            'university' => 'Duy Tan University',
             'department' => 'Computer Science',
             'is_active' => true,
         ]);
@@ -53,10 +55,11 @@ class UserSeeder extends Seeder
         // Create student users
         $student1 = User::create([
             'name' => 'Student One',
-            'email' => 'student1@unishare.com',
+            'email' => 'student1@dtu.vn',
+            'phone' => '0971234561',
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
-            'university' => 'UniShare University',
+            'university' => 'Duy Tan University',
             'department' => 'Computer Science',
             'student_id' => 'CS001',
             'is_active' => true,
@@ -65,10 +68,11 @@ class UserSeeder extends Seeder
 
         $student2 = User::create([
             'name' => 'Student Two',
-            'email' => 'student2@unishare.com',
+            'email' => 'student2@dtu.vn',
+            'phone' => '0971234560',
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
-            'university' => 'UniShare University',
+            'university' => 'Duy Tan University',
             'department' => 'Engineering',
             'student_id' => 'ENG001',
             'is_active' => true,
@@ -81,4 +85,3 @@ class UserSeeder extends Seeder
         });
     }
 }
-

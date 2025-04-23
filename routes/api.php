@@ -34,6 +34,9 @@ use Illuminate\Support\Facades\Route;
 
 // Xác thực
 Route::prefix('auth')->group(function () {
+    /*
+        //prefix('auth'): Tất cả route bên trong đều bắt đầu bằng /auth
+    */
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
     Route::post('forgot-password', [PasswordResetController::class, 'forgotPassword']);
@@ -57,6 +60,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Các route yêu cầu xác thực và tài khoản đang hoạt động
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
+     /*
+        //Route::middleware(['auth:sanctum', 'active'])
+        //tất cả các route trong group này sẽ được bảo vệ bởi 2 middleware: auth:sanctum, active
+    */
+
     // Tài liệu
     Route::prefix('documents')->group(function () {
         Route::get('/', [DocumentController::class, 'index']);

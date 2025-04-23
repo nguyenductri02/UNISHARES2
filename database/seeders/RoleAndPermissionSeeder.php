@@ -77,14 +77,14 @@ class RoleAndPermissionSeeder extends Seeder
         ];
 
         foreach ($permissions as $permission) {
-            Permission::create(['name' => $permission]);
+            Permission::create(['name' => $permission, 'guard_name' => 'web']);
         }
 
         // Create roles and assign permissions
-        $adminRole = Role::create(['name' => 'admin']);
+        $adminRole = Role::create(['name' => 'admin', 'guard_name' => 'web']);
         $adminRole->givePermissionTo(Permission::all());
 
-        $moderatorRole = Role::create(['name' => 'moderator']);
+        $moderatorRole = Role::create(['name' => 'moderator', 'guard_name' => 'web']);
         $moderatorRole->givePermissionTo([
             'view documents',
             'approve documents',
@@ -101,7 +101,7 @@ class RoleAndPermissionSeeder extends Seeder
             'use ai chat',
         ]);
 
-        $lecturerRole = Role::create(['name' => 'lecturer']);
+        $lecturerRole = Role::create(['name' => 'lecturer', 'guard_name' => 'web']);
         $lecturerRole->givePermissionTo([
             'view documents',
             'create documents',
@@ -131,7 +131,7 @@ class RoleAndPermissionSeeder extends Seeder
             'use ai chat',
         ]);
 
-        $studentRole = Role::create(['name' => 'student']);
+        $studentRole = Role::create(['name' => 'student', 'guard_name' => 'web']);
         $studentRole->givePermissionTo([
             'view documents',
             'create documents',

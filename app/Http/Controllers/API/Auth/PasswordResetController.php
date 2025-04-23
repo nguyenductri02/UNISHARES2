@@ -25,6 +25,9 @@ class PasswordResetController extends Controller
 
         // Gửi email đặt lại mật khẩu
         $status = Password::sendResetLink(
+            /*
+                // sendResetLink():  gửi email chứa link reset password.
+            */
             $request->only('email')
         );
 
