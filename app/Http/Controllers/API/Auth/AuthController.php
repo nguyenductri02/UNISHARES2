@@ -19,8 +19,8 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'phone' => 'required',
             'password' => ['required', 'confirmed', Password::defaults()],
-            'university' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
+            'university' => 'nullable|string|max:255',
+            'department' => 'nullable|string|max:255',
             'student_id' => 'nullable|string|max:50',
             'bio' => 'nullable|string|max:500',
         ]);
