@@ -118,7 +118,7 @@ class AdminDocumentController extends Controller
     public function show(Document $document)
     {
         // Load relationships for detailed view
-        $document->load(['user', 'ratings', 'comments']);
+        $document->load(['user', 'fileUpload', 'ratings', 'comments']);
         
         return new DocumentResource($document);
     }

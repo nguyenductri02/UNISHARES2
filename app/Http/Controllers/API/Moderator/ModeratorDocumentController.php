@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\Moderator;
 use App\Http\Controllers\Controller;
 use App\Models\Document;
 use App\Models\Report;
+use App\Http\Resources\DocumentResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -102,6 +103,35 @@ class ModeratorDocumentController extends Controller
             
             return response()->json([
                 'message' => 'Error fetching pending documents: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Display the specified document
+     * 
+     * @param Document $document
+     * @return \Illuminate\Http\Response
+     */
+    public function show(Document $document)
+    {
+        try {
+            // Load the document with all necessary relationships
+            $document->load(['user', 'fileUpload', 'ratings', 'comments']);
+            
+            return response()->json([
+                'success' => true,
+                'data' => new DocumentResource($document)
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching document details: ' . $e->getMessage(), [
+                'exception' => $e,
+                'document_id' => $document->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error fetching document details: ' . $e->getMessage()
             ], 500);
         }
     }

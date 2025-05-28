@@ -207,10 +207,15 @@ class Document extends Model
      * Get the view URL for the document
      *
      * @param bool $includeToken Whether to include an authentication token in the URL
-     * @return string
+     * @return string|null
      */
     public function getViewUrlAttribute($includeToken = false)
     {
+        // Check if file_path exists
+        if (!$this->file_path) {
+            return null;
+        }
+        
         // Remove 'private/' prefix if present for API URL
         $path = $this->file_path;
         if (strpos($path, 'private/') === 0) {

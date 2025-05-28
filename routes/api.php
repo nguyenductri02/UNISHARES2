@@ -262,6 +262,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('moderator')->middleware(['auth:sanctum', 'role:moderator'])->group(function () {
         Route::get('/documents', [ModeratorDocumentController::class, 'index']);
         Route::get('/documents/pending', [ModeratorDocumentController::class, 'pendingApproval']);
+        Route::get('/documents/{document}', [ModeratorDocumentController::class, 'show']);
         Route::post('/documents/{document}/approve', [ModeratorDocumentController::class, 'approve']);
         Route::post('/documents/{document}/reject', [ModeratorDocumentController::class, 'reject']);
         Route::delete('/documents/{document}', [ModeratorDocumentController::class, 'delete']);

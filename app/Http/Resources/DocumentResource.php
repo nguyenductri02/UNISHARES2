@@ -24,6 +24,9 @@ class DocumentResource extends JsonResource
             'file_size' => $this->file_size,
             'file_hash' => $this->file_hash,
             'file_path' => $this->file_path,
+            'file_url' => $this->getViewUrlAttribute(),
+            'download_url' => $this->getDownloadUrlAttribute(),
+            'preview_url' => $this->getViewUrlAttribute(),
             'subject' => $this->subject,
             'course_code' => $this->course_code,
             'is_official' => $this->is_official,
@@ -44,14 +47,14 @@ class DocumentResource extends JsonResource
                 return [
                     'average' => $this->ratings->avg('rating') ?? 0,
                     'count' => $this->ratings->count(),
-                    'details' => RatingResource::collection($this->ratings),
+                    'details' => \App\Http\Resources\RatingResource::collection($this->ratings),
                 ];
             }),
             'comments' => $this->whenLoaded('comments', function () {
-                return CommentResource::collection($this->comments);
+                return \App\Http\Resources\CommentResource::collection($this->comments);
             }),
             'categories' => $this->whenLoaded('categories', function () {
-                return CategoryResource::collection($this->categories);
+                return \App\Http\Resources\CategoryResource::collection($this->categories);
             }),
         ];
     }
