@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Test</title>
+    <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="log"></div>
+    <button onclick="testConnection()">Test Connection</button>
+
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        
+        function addLog(message) {
+            log.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>';
+            console.log(message);
+        }
+        
+        function testConnection() {
+            addLog('Testing Socket.IO connection to http://localhost:6001');
+            
+            const socket = io('http://localhost:6001', {
+                transports: ['websocket', 'polling']
+            });
+            
+            socket.on('connect', () => {
+                status.textContent = 'Connected!';
+                status.style.color = 'green';
+                addLog('✅ Socket.IO connected successfully');
+                addLog('Socket ID: ' + socket.id);
+            });
+            
+            socket.on('disconnect', (reason) => {
+                status.textContent = 'Disconnected';
+                status.style.color = 'red';
+                addLog('❌ Socket.IO disconnected: ' + reason);
+            });
+            
+            socket.on('connect_error', (error) => {
+                status.textContent = 'Connection Error!';
+                status.style.color = 'red';
+                addLog('❌ Socket.IO connection error: ' + error.message);
+            });
+            
+            // Test sending a message
+            setTimeout(() => {
+                if (socket.connected) {
+                    socket.emit('test', { message: 'Hello from client!' });
+                    addLog('📤 Sent test message');
+                }
+            }, 2000);
+        }
+        
+        // Auto-test on page load
+        testConnection();
+    </script>
+</body>
+</html>

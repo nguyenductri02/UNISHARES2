@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct WebSocket Test</title>
+</head>
+<body>
+    <h1>Direct WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="log"></div>
+    <button onclick="testConnection()">Test Connection</button>
+
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        
+        function addLog(message) {
+            log.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>';
+            console.log(message);
+        }
+        
+        function testConnection() {
+            // Clear previous logs
+            log.innerHTML = '';
+            status.textContent = 'Testing...';
+            
+            // Test 1: Basic WebSocket connection to Echo Server
+            addLog('Testing basic WebSocket connection...');
+            
+            const wsUrl = 'ws://127.0.0.1:6001/app/a24752487d61e0231d4016b1a7101bb2?protocol=7&client=js&version=7.6.0&flash=false';
+            addLog('Connecting to: ' + wsUrl);
+            
+            const ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                status.textContent = 'Connected!';
+                status.style.color = 'green';
+                addLog('✅ WebSocket connection opened successfully');
+                
+                // Send a ping message
+                const pingMessage = JSON.stringify({
+                    event: 'pusher:ping',
+                    data: {}
+                });
+                ws.send(pingMessage);
+                addLog('Sent ping message: ' + pingMessage);
+            };
+            
+            ws.onmessage = function(event) {
+                addLog('📥 Message received: ' + event.data);
+                
+                // Parse the message
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.event === 'pusher:connection_established') {
+                        addLog('✅ Connection established with socket ID: ' + message.data.socket_id);
+                    } else if (message.event === 'pusher:pong') {
+                        addLog('✅ Pong received - connection is alive');
+                    }
+                } catch (e) {
+                    addLog('⚠️ Could not parse message as JSON');
+                }
+            };
+            
+            ws.onerror = function(event) {
+                status.textContent = 'Error!';
+                status.style.color = 'red';
+                addLog('❌ WebSocket error occurred');
+                console.error('WebSocket error:', event);
+            };
+            
+            ws.onclose = function(event) {
+                status.textContent = 'Disconnected';
+                status.style.color = 'red';
+                addLog('❌ WebSocket closed. Code: ' + event.code + ', Reason: ' + event.reason);
+                
+                if (event.code === 1006) {
+                    addLog('🔍 Code 1006 usually means connection failed during handshake');
+                }
+            };
+            
+            // Test timeout
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    addLog('⏱️ Connection timeout - still connecting after 10 seconds');
+                    ws.close();
+                }
+            }, 10000);
+        }
+        
+        // Auto-start test when page loads
+        window.onload = function() {
+            testConnection();
+        };
+    </script>
+</body>
+</html>

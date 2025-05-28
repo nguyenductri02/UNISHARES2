@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Authentication Test</title>
+    <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.0/dist/echo.iife.js"></script>
+</head>
+<body>
+    <h1>WebSocket Authentication Test</h1>
+    <div id="status">Testing...</div>
+    <div id="log"></div>
+    
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="testWithAuth()">Test With Auth</button>
+    <button onclick="testChannel()">Test Channel</button>
+    
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        
+        function addLog(message) {
+            log.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>';
+            console.log(message);
+        }
+        
+        // Test 1: Basic Socket.IO connection
+        function testConnection() {
+            addLog('=== Testing basic Socket.IO connection ===');
+            
+            const socket = io('http://localhost:6001', {
+                transports: ['websocket', 'polling']
+            });
+            
+            socket.on('connect', () => {
+                status.textContent = 'Socket.IO Connected!';
+                status.style.color = 'green';
+                addLog('✅ Socket.IO connected successfully');
+                addLog('Socket ID: ' + socket.id);
+            });
+            
+            socket.on('disconnect', (reason) => {
+                addLog('❌ Socket.IO disconnected: ' + reason);
+            });
+            
+            socket.on('connect_error', (error) => {
+                addLog('❌ Socket.IO connection error: ' + error.message);
+            });
+        }
+        
+        // Test 2: Laravel Echo with authentication
+        function testWithAuth() {
+            addLog('=== Testing Laravel Echo with authentication ===');
+            
+            window.io = io;
+            
+            const echo = new Echo({
+                broadcaster: 'socket.io',
+                host: 'http://localhost:6001',
+                authEndpoint: 'http://127.0.0.1:8000/api/broadcasting/auth',
+                auth: {
+                    headers: {
+                        Authorization: 'Bearer test-token', // Placeholder token
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                },
+            });
+            
+            if (echo.connector && echo.connector.socket) {
+                echo.connector.socket.on('connect', () => {
+                    addLog('✅ Laravel Echo connected successfully');
+                });
+                
+                echo.connector.socket.on('disconnect', (reason) => {
+                    addLog('❌ Laravel Echo disconnected: ' + reason);
+                });
+                
+                echo.connector.socket.on('connect_error', (error) => {
+                    addLog('❌ Laravel Echo connection error: ' + error.message);
+                });
+            }
+            
+            // Store for use in channel test
+            window.echoInstance = echo;
+        }
+        
+        // Test 3: Channel subscription
+        function testChannel() {
+            if (!window.echoInstance) {
+                addLog('❌ Please run "Test With Auth" first');
+                return;
+            }
+            
+            addLog('=== Testing channel subscription ===');
+            
+            try {
+                const channel = window.echoInstance.channel('test-channel');
+                addLog('✅ Subscribed to test-channel');
+                
+                channel.listen('TestEvent', (data) => {
+                    addLog('✅ Received TestEvent: ' + JSON.stringify(data));
+                });
+                
+            } catch (error) {
+                addLog('❌ Channel subscription error: ' + error.message);
+            }
+        }
+        
+        // Auto-test on page load
+        testConnection();
+    </script>
+</body>
+</html>

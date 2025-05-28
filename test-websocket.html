@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="log"></div>
+
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        
+        function addLog(message) {
+            log.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>';
+        }
+          // Test basic WebSocket connection
+        const ws = new WebSocket('ws://127.0.0.1:6001/app/a24752487d61e0231d4016b1a7101bb2?protocol=7&client=js&version=7.6.0&flash=false');
+        
+        ws.onopen = function(event) {
+            status.textContent = 'Connected!';
+            status.style.color = 'green';
+            addLog('WebSocket connection opened');
+            
+            // Test subscribing to a channel
+            const subscribeMessage = JSON.stringify({
+                event: 'pusher:subscribe',
+                data: {
+                    channel: 'test-channel'
+                }
+            });
+            ws.send(subscribeMessage);
+            addLog('Sent subscription request');
+        };
+        
+        ws.onmessage = function(event) {
+            addLog('Message received: ' + event.data);
+        };
+        
+        ws.onerror = function(event) {
+            status.textContent = 'Error!';
+            status.style.color = 'red';
+            addLog('WebSocket error: ' + JSON.stringify(event));
+        };
+        
+        ws.onclose = function(event) {
+            status.textContent = 'Disconnected';
+            status.style.color = 'red';
+            addLog('WebSocket closed. Code: ' + event.code + ', Reason: ' + event.reason);
+        };
+    </script>
+</body>
+</html>

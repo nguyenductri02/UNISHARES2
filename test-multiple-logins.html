@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .login-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .login-card {
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 5px;
+            width: 300px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .login-form {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        input {
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 8px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            min-height: 100px;
+        }
+        .logs {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f5f5f5;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Multiple Login Test</h1>
+    <p>This page allows testing multiple concurrent logins for the same user or different users.</p>
+    
+    <div class="login-container">
+        <div class="login-card">
+            <h3>Session 1</h3>
+            <div class="login-form">
+                <div class="form-group">
+                    <label for="email1">Email:</label>
+                    <input type="email" id="email1" value="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="password1">Password:</label>
+                    <input type="password" id="password1" value="password">
+                </div>
+                <button onclick="login(1)">Login</button>
+                <button onclick="getUserInfo(1)">Get User Info</button>
+                <button onclick="logout(1)">Logout</button>
+                <div class="status" id="status1">Not logged in</div>
+            </div>
+        </div>
+
+        <div class="login-card">
+            <h3>Session 2</h3>
+            <div class="login-form">
+                <div class="form-group">
+                    <label for="email2">Email:</label>
+                    <input type="email" id="email2" value="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="password2">Password:</label>
+                    <input type="password" id="password2" value="password">
+                </div>
+                <button onclick="login(2)">Login</button>
+                <button onclick="getUserInfo(2)">Get User Info</button>
+                <button onclick="logout(2)">Logout</button>
+                <div class="status" id="status2">Not logged in</div>
+            </div>
+        </div>
+    </div>
+
+    <h3>Debug Logs</h3>
+    <div class="logs" id="logs"></div>
+
+    <script>
+        // Store tokens and user info
+        const sessions = {
+            1: { token: null, user: null },
+            2: { token: null, user: null }
+        };
+
+        // API base URL
+        const API_BASE_URL = 'http://127.0.0.1:8000/api';
+
+        // Log function
+        function log(message) {
+            const logsElement = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logsElement.innerHTML = `<div>[${timestamp}] ${message}</div>` + logsElement.innerHTML;
+        }
+
+        // Update status display
+        function updateStatus(sessionId) {
+            const statusElement = document.getElementById(`status${sessionId}`);
+            const session = sessions[sessionId];
+            
+            if (session.user) {
+                statusElement.innerHTML = `
+                    <strong>Logged in as:</strong> ${session.user.name}<br>
+                    <strong>User ID:</strong> ${session.user.id}<br>
+                    <strong>Email:</strong> ${session.user.email}<br>
+                    <strong>Token:</strong> ${session.token ? session.token.substring(0, 10) + '...' : 'None'}
+                `;
+            } else {
+                statusElement.innerHTML = 'Not logged in';
+            }
+        }
+
+        // Login function
+        async function login(sessionId) {
+            const email = document.getElementById(`email${sessionId}`).value;
+            const password = document.getElementById(`password${sessionId}`).value;
+            
+            log(`Session ${sessionId}: Attempting login for ${email}`);
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    sessions[sessionId].token = data.token;
+                    sessions[sessionId].user = data.user;
+                    log(`Session ${sessionId}: Login successful (User ID: ${data.user.id})`);
+                    updateStatus(sessionId);
+                } else {
+                    log(`Session ${sessionId}: Login failed - ${data.message}`);
+                    sessions[sessionId].token = null;
+                    sessions[sessionId].user = null;
+                    updateStatus(sessionId);
+                }
+            } catch (error) {
+                log(`Session ${sessionId}: Error during login - ${error.message}`);
+            }
+        }
+
+        // Get user info function
+        async function getUserInfo(sessionId) {
+            if (!sessions[sessionId].token) {
+                log(`Session ${sessionId}: Not logged in`);
+                return;
+            }
+            
+            log(`Session ${sessionId}: Fetching user info`);
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/user`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${sessions[sessionId].token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    sessions[sessionId].user = data.user;
+                    log(`Session ${sessionId}: User info fetched successfully (User ID: ${data.user.id})`);
+                    updateStatus(sessionId);
+                } else {
+                    log(`Session ${sessionId}: Failed to fetch user info - ${data.message}`);
+                    if (response.status === 401) {
+                        log(`Session ${sessionId}: Token has expired or is invalid`);
+                        sessions[sessionId].token = null;
+                        sessions[sessionId].user = null;
+                        updateStatus(sessionId);
+                    }
+                }
+            } catch (error) {
+                log(`Session ${sessionId}: Error fetching user info - ${error.message}`);
+            }
+        }
+
+        // Logout function
+        async function logout(sessionId) {
+            if (!sessions[sessionId].token) {
+                log(`Session ${sessionId}: Not logged in`);
+                return;
+            }
+            
+            log(`Session ${sessionId}: Attempting to logout`);
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${sessions[sessionId].token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log(`Session ${sessionId}: Logout successful`);
+                    sessions[sessionId].token = null;
+                    sessions[sessionId].user = null;
+                    updateStatus(sessionId);
+                } else {
+                    log(`Session ${sessionId}: Logout failed - ${data.message}`);
+                }
+            } catch (error) {
+                log(`Session ${sessionId}: Error during logout - ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
