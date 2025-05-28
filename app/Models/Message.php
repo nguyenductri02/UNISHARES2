@@ -18,10 +18,8 @@ class Message extends Model
         'chat_id',
         'user_id',
         'content',
-        'attachment_path',
-        'attachment_type',
-        'is_read',
-        'read_at',
+        'created_at',
+        'updated_at',
     ];
 
     /**
@@ -67,5 +65,13 @@ class Message extends Model
     public function fileUpload()
     {
         return $this->morphOne(FileUpload::class, 'uploadable');
+    }
+    
+    /**
+     * Get the attachments for this message.
+     */
+    public function attachments()
+    {
+        return $this->hasMany(MessageAttachment::class);
     }
 }

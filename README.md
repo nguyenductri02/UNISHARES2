@@ -49,6 +49,24 @@ We would like to extend our thanks to the following sponsors for funding Laravel
 - **[byte5](https://byte5.de)**
 - **[OP.GG](https://op.gg)**
 
+## Troubleshooting
+
+### Missing file_upload_id Column
+
+If you encounter errors related to a missing `file_upload_id` column in the `post_attachments` table when uploading files to posts, run the following command:
+
+```bash
+php artisan posts:fix-attachments
+```
+
+This will add the missing column to the database table. Alternatively, you can run:
+
+```bash
+php artisan migrate
+```
+
+to run all pending migrations.
+
 ## Contributing
 
 Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).

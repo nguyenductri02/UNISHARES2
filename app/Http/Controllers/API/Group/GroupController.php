@@ -5,6 +5,8 @@ namespace App\Http\Controllers\API\Group;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\GroupResource;
 use App\Models\Group;
+use App\Models\Chat;
+use App\Models\FileUpload;
 use App\Services\FileUploadService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -24,6 +26,7 @@ class GroupController extends Controller
     
     public function index(Request $request)
     {
+        $user = $request->user();
         $query = Group::query();
         
         // Apply filters
@@ -31,31 +34,58 @@ class GroupController extends Controller
             $query->where('type', $request->type);
         }
         
-        if ($request->has('course_code')) {
-            $query->where('course_code', $request->course_code);
-        }
-        
         if ($request->has('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('description', 'like', '%' . $request->search . '%');
+            $searchTerm = $request->search;
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('name', 'like', "%{$searchTerm}%")
+                  ->orWhere('description', 'like', "%{$searchTerm}%")
+                  ->orWhere('course_code', 'like', "%{$searchTerm}%");
             });
         }
         
-        // Show only public groups or groups the user is a member of
-        $query->where(function ($q) use ($request) {
-            $q->where('is_private', false)
-              ->orWhereHas('members', function ($q) use ($request) {
-                  $q->where('user_id', $request->user()->id);
-              });
-        });
+        // If user is authenticated, include their joined groups as well as public groups
+        if ($user) {
+            $userId = $user->id;
+            
+            // Use requires_approval instead of is_private
+            $query->where(function($q) use ($userId) {
+                // Include public groups (where requires_approval is false or null)
+                $q->where('requires_approval', false)
+                  ->orWhereNull('requires_approval')
+                  // Include groups where the user is a member
+                  ->orWhereExists(function($subquery) use ($userId) {
+                      $subquery->select(\DB::raw(1))
+                               ->from('users')
+                               ->join('group_members', 'users.id', '=', 'group_members.user_id')
+                               ->whereRaw('groups.id = group_members.group_id')
+                               ->where('user_id', $userId);
+                  });
+            });
+        } else {
+            // For guest users, only include public groups
+            $query->where(function($q) {
+                $q->where('requires_approval', false)
+                  ->orWhereNull('requires_approval');
+            });
+        }
         
-        // Sort by latest
-        $query->latest();
+        // Apply sorting
+        if ($request->has('sort_by')) {
+            $sortField = $request->sort_by;
+            $sortDirection = $request->input('sort_direction', 'asc');
+            
+            if (in_array($sortField, ['name', 'created_at', 'member_count'])) {
+                $query->orderBy($sortField, $sortDirection);
+            }
+        } else {
+            // Default sort by newest
+            $query->orderBy('created_at', 'desc');
+        }
         
-        $groups = $query->paginate(15);
+        $perPage = $request->input('per_page', 15);
+        $groups = $query->paginate($perPage);
         
-        return GroupResource::collection($groups);
+        return response()->json($groups);
     }
     
     public function store(Request $request)
@@ -74,7 +104,7 @@ class GroupController extends Controller
         }
         
         // Check if user has permission to create groups
-        if (!$request->user()->can('create group')) {
+        if (!$request->user()->can('create groups')) {
             return response()->json(['message' => 'You do not have permission to create groups'], 403);
         }
         
@@ -94,24 +124,45 @@ class GroupController extends Controller
             }
         }
         
-        // Create the group
-        $group = Group::create([
-            'name' => $request->name,
-            'description' => $request->description,
-            'type' => $request->type,
-            'course_code' => $request->course_code,
-            'is_private' => $request->is_private ?? false,
-            'cover_image' => $coverImagePath,
-            'created_by' => $request->user()->id,
-        ]);
+        // Make sure the type is one of the allowed values
+        $type = $request->input('type');
+        if (!in_array($type, ['course', 'university', 'interest'])) {
+            $type = 'course'; // Default to 'course' if invalid type
+        }
         
-        // Add the creator as a member and admin
-        $group->members()->create([
-            'user_id' => $request->user()->id,
-            'role' => 'admin',
-        ]);
+        // Create the group with properly validated values
+        // Check if created_by column exists in the table
+        $hasCreatedByColumn = \Schema::hasColumn('groups', 'created_by');
         
-        return new GroupResource($group);
+        try {
+            $group = new Group();
+            $group->name = $request->input('name');
+            $group->description = $request->input('description');
+            $group->type = $type; // Use the validated type
+            $group->course_code = $request->input('course_code');
+            $group->requires_approval = $request->input('is_private', false);
+            $group->cover_image = $coverImagePath;
+            $group->creator_id = $request->user()->id;
+            
+            // Only set created_by if the column exists
+            if ($hasCreatedByColumn) {
+                $group->created_by = $request->user()->id;
+            }
+            
+            $group->save();
+            
+            // Add the creator as a member and admin
+            $group->members()->attach($request->user()->id, [
+                'role' => 'admin',
+                'status' => 'approved',
+                'joined_at' => now(),
+            ]);
+            
+            return new GroupResource($group);
+        } catch (\Exception $e) {
+            \Log::error('Error creating group: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to create group: ' . $e->getMessage()], 500);
+        }
     }
     
     public function show(Group $group)
@@ -133,7 +184,7 @@ class GroupController extends Controller
         // Check if user has permission to update this group
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to update this group'], 403);
         }
         
@@ -182,12 +233,13 @@ class GroupController extends Controller
         // Check if user has permission to delete this group
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to delete this group'], 403);
         }
         
-        // Delete all group members
-        $group->members()->delete();
+        // FIX: Sử dụng detach thay vì delete để tránh xóa cascade có thể ảnh hưởng đến tài khoản
+        // Detach tất cả người dùng khỏi nhóm
+        $group->members()->detach();
         
         // Delete all posts in the group
         foreach ($group->posts as $post) {
@@ -234,7 +286,10 @@ class GroupController extends Controller
         $isMember = $group->members()->where('user_id', $request->user()->id)->exists();
         
         if ($isMember) {
-            return response()->json(['message' => 'You are already a member of this group'], 400);
+            return response()->json([
+                'success' => false,
+                'message' => 'You are already a member of this group'
+            ], 400);
         }
         
         // Check if the group is private
@@ -257,39 +312,107 @@ class GroupController extends Controller
                 );
             }
             
-            return response()->json(['message' => 'Join request sent successfully']);
+            return response()->json([
+                'success' => true,
+                'message' => 'Join request sent successfully'
+            ]);
         } else {
-            // Add user as a member
-            $group->members()->create([
-                'user_id' => $request->user()->id,
+            // Add user as a member using attach instead of create
+            $group->members()->attach($request->user()->id, [
                 'role' => 'member',
+                'status' => 'approved',
+                'joined_at' => now(),
             ]);
             
-            return response()->json(['message' => 'Joined group successfully']);
+            // Update member count
+            $group->increment('member_count');
+            
+            // Automatically add user to group chat if it exists
+            $this->addMemberToGroupChat($group->id, $request->user()->id);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Joined group successfully'
+            ]);
         }
     }
     
     public function leave(Request $request, Group $group)
     {
-        // Check if user is a member
-        $member = $group->members()->where('user_id', $request->user()->id)->first();
-        
-        if (!$member) {
-            return response()->json(['message' => 'You are not a member of this group'], 400);
+        try {
+            // Log the request for debugging
+            \Log::info('Leave group request', [
+                'group_id' => $group->id,
+                'user_id' => $request->user() ? $request->user()->id : 'unauthenticated',
+                'headers' => $request->header(),
+            ]);
+            
+            // Explicit authentication check
+            if (!$request->user()) {
+                \Log::warning('Unauthenticated leave group attempt', [
+                    'group_id' => $group->id,
+                    'ip' => $request->ip(),
+                ]);
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+            
+            // Check if user is a member
+            $member = $group->members()->where('user_id', $request->user()->id)->first();
+            
+            if (!$member) {
+                \Log::warning('Non-member attempted to leave group', [
+                    'group_id' => $group->id,
+                    'user_id' => $request->user()->id,
+                ]);
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'You are not a member of this group'
+                ], 400);
+            }
+            
+            // Check if user is the only admin
+            $isAdmin = $member->role === 'admin';
+            $adminCount = $group->members()->where('role', 'admin')->count();
+            
+            if ($isAdmin && $adminCount === 1) {
+                \Log::warning('Last admin attempted to leave group', [
+                    'group_id' => $group->id,
+                    'user_id' => $request->user()->id,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You cannot leave the group as you are the only admin. Please assign another admin first.'
+                ], 400);
+            }
+            
+            // FIX: Thay vì xóa bản ghi trực tiếp, chúng ta sẽ sử dụng detach để an toàn hơn
+            // Điều này ngăn chặn lỗi xóa cascade ảnh hưởng đến tài khoản người dùng
+            $userId = $request->user()->id;
+            $result = $group->safeRemoveMember($userId);
+            
+            \Log::info('User left group successfully', [
+                'group_id' => $group->id,
+                'user_id' => $userId,
+                'remove_result' => $result,
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Left group successfully'
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error in leave group', [
+                'group_id' => $group->id,
+                'user_id' => $request->user() ? $request->user()->id : 'unknown',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred: ' . $e->getMessage()
+            ], 500);
         }
-        
-        // Check if user is the only admin
-        $isAdmin = $member->role === 'admin';
-        $adminCount = $group->members()->where('role', 'admin')->count();
-        
-        if ($isAdmin && $adminCount === 1) {
-            return response()->json(['message' => 'You cannot leave the group as you are the only admin. Please assign another admin first.'], 400);
-        }
-        
-        // Remove user from the group
-        $member->delete();
-        
-        return response()->json(['message' => 'Left group successfully']);
     }
     
     public function members(Group $group)
@@ -303,9 +426,33 @@ class GroupController extends Controller
             }
         }
         
-        $members = $group->members()->with('user')->paginate(20);
+        // Join members data with the pivot information
+        $membersWithRoles = $group->members()
+            ->withPivot('role', 'status', 'joined_at')
+            ->paginate(20);
+            
+        // Transform the result to include pivot data directly in the member objects
+        $transformedMembers = $membersWithRoles->map(function ($member) {
+            $memberData = $member->toArray();
+            
+            // Add role and joined_at from pivot to main object level
+            $memberData['role'] = $member->pivot->role ?? 'member';
+            $memberData['status'] = $member->pivot->status ?? 'approved';
+            $memberData['joined_at'] = $member->pivot->joined_at;
+            
+            return $memberData;
+        });
         
-        return response()->json($members);
+        return response()->json([
+            'success' => true,
+            'data' => $transformedMembers,
+            'meta' => [
+                'current_page' => $membersWithRoles->currentPage(),
+                'last_page' => $membersWithRoles->lastPage(),
+                'per_page' => $membersWithRoles->perPage(),
+                'total' => $membersWithRoles->total()
+            ]
+        ]);
     }
     
     public function updateMember(Request $request, Group $group, $userId)
@@ -313,7 +460,7 @@ class GroupController extends Controller
         // Check if user has permission to update members
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to update members'], 403);
         }
         
@@ -351,7 +498,7 @@ class GroupController extends Controller
         // Check if user has permission to remove members
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to remove members'], 403);
         }
         
@@ -371,8 +518,8 @@ class GroupController extends Controller
             }
         }
         
-        // Remove the member
-        $member->delete();
+        // FIX: Sử dụng detach thay vì delete để tránh xóa cascade ảnh hưởng đến tài khoản
+        $result = $group->safeRemoveMember($userId);
         
         // Notify the user
         $this->notificationService->sendNotification(
@@ -384,13 +531,44 @@ class GroupController extends Controller
         
         return response()->json(['message' => 'Member removed successfully']);
     }
+
+    public function checkJoinRequestStatus(Request $request, Group $group)
+    {
+        $user = $request->user();
+        
+        // Check if user is already a member
+        $isMember = $group->members()->where('user_id', $user->id)->exists();
+        
+        if ($isMember) {
+            return response()->json([
+                'success' => true,
+                'data' => ['status' => 'member']
+            ]);
+        }
+        
+        // Check if user has a pending join request
+        $joinRequest = $group->joinRequests()->where('user_id', $user->id)->first();
+        
+        if ($joinRequest) {
+            return response()->json([
+                'success' => true,
+                'data' => ['status' => $joinRequest->status]
+            ]);
+        }
+        
+        // User has no join request and is not a member
+        return response()->json([
+            'success' => true,
+            'data' => ['status' => 'none']
+        ]);
+    }
     
     public function joinRequests(Request $request, Group $group)
     {
         // Check if user has permission to view join requests
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to view join requests'], 403);
         }
         
@@ -404,7 +582,7 @@ class GroupController extends Controller
         // Check if user has permission to approve join requests
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to approve join requests'], 403);
         }
         
@@ -424,6 +602,9 @@ class GroupController extends Controller
             'role' => 'member',
         ]);
         
+        // Automatically add user to group chat if it exists
+        $this->addMemberToGroupChat($group->id, $userId);
+        
         // Notify the user
         $this->notificationService->sendNotification(
             $userId,
@@ -440,7 +621,7 @@ class GroupController extends Controller
         // Check if user has permission to reject join requests
         $isAdmin = $group->members()->where('user_id', $request->user()->id)->where('role', 'admin')->exists();
         
-        if (!$isAdmin && !$request->user()->can('manage any group')) {
+        if (!$isAdmin && !$request->user()->can('manage group members')) {
             return response()->json(['message' => 'You do not have permission to reject join requests'], 403);
         }
         
@@ -463,5 +644,42 @@ class GroupController extends Controller
         );
         
         return response()->json(['message' => 'Join request rejected successfully']);
+    }
+    
+    /**
+     * Automatically add a member to the group chat when they join the group
+     * 
+     * @param int $groupId
+     * @param int $userId
+     * @return void
+     */
+    private function addMemberToGroupChat($groupId, $userId)
+    {
+        try {
+            // Find the group chat if it exists
+            $chat = \App\Models\Chat::where('group_id', $groupId)->first();
+            
+            if ($chat) {
+                // Check if user is already a participant
+                $isParticipant = $chat->participants()->where('user_id', $userId)->exists();
+                
+                if (!$isParticipant) {
+                    // Add user to the chat
+                    $chat->participants()->create([
+                        'user_id' => $userId,
+                        'is_admin' => false,
+                        'joined_at' => now()
+                    ]);
+                    
+                    \Log::info("Added user {$userId} to group chat for group {$groupId}");
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error("Failed to add user to group chat", [
+                'group_id' => $groupId,
+                'user_id' => $userId,
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }

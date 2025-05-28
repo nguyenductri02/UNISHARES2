@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Document extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -16,6 +17,7 @@ class Document extends Model
      */
     protected $fillable = [
         'user_id',
+        'group_id',
         'title',
         'description',
         'file_path',
@@ -31,6 +33,8 @@ class Document extends Model
         'course_code',
         'download_count',
         'view_count',
+        'type',    
+        'status',
     ];
 
     /**
@@ -52,6 +56,14 @@ class Document extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the group that owns the document (if any).
+     */
+    public function group()
+    {
+        return $this->belongsTo(Group::class);
     }
 
     /**
@@ -108,5 +120,146 @@ class Document extends Model
     public function incrementViewCount()
     {
         $this->increment('view_count');
+    }
+
+    /**
+     * Get the thumbnail URL for the document.
+     *
+     * @return string|null
+     */
+    public function getThumbnailUrlAttribute()
+    {
+        if (!$this->thumbnail_path) {
+            // Return appropriate default image based on file type
+            return $this->getDefaultThumbnail();
+        }
+        
+        return url('storage/' . $this->thumbnail_path);
+    }
+    
+    /**
+     * Get a default thumbnail based on document type
+     * 
+     * @return string
+     */
+    protected function getDefaultThumbnail()
+    {
+        $extension = pathinfo($this->file_name, PATHINFO_EXTENSION);
+        
+        switch (strtolower($extension)) {
+            case 'doc':
+            case 'docx':
+                return url('storage/documents/doc.png');
+            case 'pdf':
+                return url('storage/documents/pdf.png');
+            case 'ppt':
+            case 'pptx':
+                return url('storage/documents/ppt.png');
+            case 'txt':
+                return url('storage/documents/txt.png');
+            case 'xls':
+            case 'xlsx':
+                return url('storage/documents/xls.png');
+            case 'zip':
+            case 'rar':
+                return url('storage/documents/zip.png');
+            default:
+                return url('storage/documents/doc.png');
+        }
+    }
+
+    /**
+     * Get the download URL for the document
+     *
+     * @param bool $includeToken Whether to include an authentication token in the URL
+     * @return string
+     */
+    public function getDownloadUrlAttribute($includeToken = false)
+    {
+        // Remove 'private/' prefix if present for API URL
+        $path = $this->file_path;
+        if (strpos($path, 'private/') === 0) {
+            $path = substr($path, 8);
+        }
+        
+        $url = url('/api/storage/download/' . $path);
+        
+        // Add authentication token if requested and user is logged in
+        if ($includeToken && auth()->check()) {
+            $token = auth()->user()->createToken('file-access')->plainTextToken;
+            $url .= '?token=' . $token;
+        }
+        
+        return $url;
+    }
+    
+    /**
+     * Get a download URL with authentication token
+     *
+     * @return string
+     */
+    public function getTokenizedDownloadUrl()
+    {
+        return $this->getDownloadUrlAttribute(true);
+    }
+    
+    /**
+     * Get the view URL for the document
+     *
+     * @param bool $includeToken Whether to include an authentication token in the URL
+     * @return string
+     */
+    public function getViewUrlAttribute($includeToken = false)
+    {
+        // Remove 'private/' prefix if present for API URL
+        $path = $this->file_path;
+        if (strpos($path, 'private/') === 0) {
+            $path = substr($path, 8);
+        }
+        
+        $url = url('/api/storage/file/' . $path);
+        
+        // Add authentication token if requested and user is logged in
+        if ($includeToken && auth()->check()) {
+            $token = auth()->user()->createToken('file-access')->plainTextToken;
+            $url .= '?token=' . $token;
+        }
+        
+        return $url;
+    }
+    
+    /**
+     * Get a view URL with authentication token
+     *
+     * @return string
+     */
+    public function getTokenizedViewUrl()
+    {
+        return $this->getViewUrlAttribute(true);
+    }
+
+    /**
+     * Scope a query to only include approved documents.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeApproved($query)
+    {
+        return $query->where(function($query) {
+            $query->where('is_approved', true)
+                  ->orWhere('status', 'approved');
+        });
+    }
+
+    /**
+     * Scope a query to only include course-type documents.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeCourses($query)
+    {
+        return $query->where('type', 'course');
     }
 }

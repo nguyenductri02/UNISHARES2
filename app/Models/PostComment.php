@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PostComment extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -17,8 +18,8 @@ class PostComment extends Model
     protected $fillable = [
         'post_id',
         'user_id',
-        'content',
         'parent_id',
+        'content',
         'like_count',
     ];
 
@@ -28,11 +29,13 @@ class PostComment extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'like_count' => 'integer',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
     ];
 
     /**
-     * Get the post that the comment belongs to.
+     * Get the post that owns the comment.
      */
     public function post()
     {
@@ -40,7 +43,7 @@ class PostComment extends Model
     }
 
     /**
-     * Get the user who wrote the comment.
+     * Get the user that owns the comment.
      */
     public function user()
     {
@@ -56,7 +59,7 @@ class PostComment extends Model
     }
 
     /**
-     * Get the replies to this comment.
+     * Get the replies for the comment.
      */
     public function replies()
     {
@@ -69,37 +72,5 @@ class PostComment extends Model
     public function likes()
     {
         return $this->morphMany(Like::class, 'likeable');
-    }
-
-    /**
-     * Get the reports for this comment.
-     */
-    public function reports()
-    {
-        return $this->morphMany(Report::class, 'reportable');
-    }
-
-    /**
-     * Check if the comment is liked by a specific user.
-     */
-    public function isLikedBy(User $user)
-    {
-        return $this->likes()->where('user_id', $user->id)->exists();
-    }
-
-    /**
-     * Increment the like count.
-     */
-    public function incrementLikeCount()
-    {
-        $this->increment('like_count');
-    }
-
-    /**
-     * Decrement the like count.
-     */
-    public function decrementLikeCount()
-    {
-        $this->decrement('like_count');
     }
 }

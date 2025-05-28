@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PostResource;
 use App\Models\Post;
 use App\Models\User;
+use App\Models\Report;
 use App\Services\FileUploadService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
@@ -275,6 +276,79 @@ class PostController extends Controller
             return response()->json(['message' => 'You have not liked this post'], 400);
         }
         
+        // Decrement like count after unlike
+        $post->decrementLikeCount();
+        
         return response()->json(['message' => 'Post unliked successfully']);
+    }
+
+    /**
+     * Report a post for inappropriate content.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\Post  $post
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function report(Request $request, Post $post)
+    {
+        // Validate the request data
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'reason' => 'required|string|max:255',
+            'details' => 'nullable|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dữ liệu đầu vào không hợp lệ',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Prevent reporting own content
+        if ($post->user_id === auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bạn không thể báo cáo bài viết của chính mình'
+            ], 403);
+        }
+
+        // Check if user has already reported this post
+        $existingReport = \App\Models\Report::where('user_id', auth()->id())
+            ->where('reportable_type', \App\Models\Post::class)
+            ->where('reportable_id', $post->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingReport) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bạn đã báo cáo bài viết này và báo cáo đang được xử lý'
+            ], 422);
+        }
+
+        // Create new report
+        $report = new \App\Models\Report();
+        $report->user_id = auth()->id();
+        $report->reportable_type = \App\Models\Post::class;
+        $report->reportable_id = $post->id;
+        $report->reason = $request->reason;
+        $report->details = $request->details;
+        $report->status = 'pending';
+        $report->save();
+
+        // Notify moderators (using events/listeners)
+        try {
+            event(new \App\Events\ReportCreated($report));
+        } catch (\Exception $e) {
+            // Log the error but don't fail the request
+            \Illuminate\Support\Facades\Log::error('Failed to dispatch report event: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Báo cáo bài viết đã được gửi thành công',
+            'data' => $report
+        ]);
     }
 }

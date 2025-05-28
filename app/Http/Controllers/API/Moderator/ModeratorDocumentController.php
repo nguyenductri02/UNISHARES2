@@ -2,210 +2,321 @@
 
 namespace App\Http\Controllers\API\Moderator;
 
-use App\Http\Controllers\API\PaginationController;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\DocumentResource;
 use App\Models\Document;
 use App\Models\Report;
-use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ModeratorDocumentController extends Controller
 {
-    protected $notificationService;
-    
-    public function __construct(NotificationService $notificationService)
+    /**
+     * Create a new controller instance.
+     *
+     * @return void
+     */
+    public function __construct()
     {
-        $this->notificationService = $notificationService;
         $this->middleware('auth:sanctum');
-        $this->middleware('role:moderator');
+        $this->middleware('role:moderator,admin');
     }
-    
+
+    /**
+     * Display a listing of documents with filtering.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function index(Request $request)
     {
-        $query = Document::query();
-        
-        // Áp dụng bộ lọc
-        if ($request->has('subject')) {
-            $query->where('subject', $request->subject);
+        try {
+            $perPage = $request->input('per_page', 10);
+            $sortBy = $request->input('sort_by', 'created_at');
+            $sortDesc = $request->input('sort_desc', true);
+            $search = $request->input('search', '');
+            $status = $request->input('status', 'all');
+            
+            $query = Document::with(['user']);
+            
+            // Apply search if provided
+            if (!empty($search)) {
+                $query->where(function($q) use ($search) {
+                    $q->where('title', 'like', "%{$search}%")
+                      ->orWhere('description', 'like', "%{$search}%")
+                      ->orWhere('keywords', 'like', "%{$search}%")
+                      ->orWhere('course_code', 'like', "%{$search}%")
+                      ->orWhere('subject', 'like', "%{$search}%");
+                });
+            }
+            
+            // Apply status filter
+            if ($status !== 'all') {
+                $isApproved = ($status === 'approved');
+                $query->where('is_approved', $isApproved);
+            }
+            
+            // Apply sorting
+            $query->orderBy($sortBy, $sortDesc ? 'desc' : 'asc');
+            
+            // Get paginated results
+            $documents = $query->paginate($perPage);
+            
+            return response()->json($documents);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching documents for moderator: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error fetching documents: ' . $e->getMessage()
+            ], 500);
         }
-        
-        if ($request->has('course_code')) {
-            $query->where('course_code', $request->course_code);
-        }
-        
-        if ($request->has('user_id')) {
-            $query->where('user_id', $request->user_id);
-        }
-        
-        if ($request->has('is_approved')) {
-            $query->where('is_approved', $request->is_approved);
-        }
-        
-        if ($request->has('is_official')) {
-            $query->where('is_official', $request->is_official);
-        }
-        
-        // Sắp xếp theo mới nhất
-        $query->latest();
-        
-        // Phân trang
-        $documents = PaginationController::paginate($query, $request);
-        
-        return DocumentResource::collection($documents);
     }
     
+    /**
+     * Get documents pending approval
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\Response
+     */
     public function pendingApproval(Request $request)
     {
-        $query = Document::where('is_approved', false);
-        
-        // Sắp xếp theo mới nhất
-        $query->latest();
-        
-        // Phân trang
-        $documents = PaginationController::paginate($query, $request);
-        
-        return DocumentResource::collection($documents);
-    }
-    
-    public function approve(Request $request, Document $document)
-    {
-        if ($document->is_approved) {
-            return response()->json(['message' => 'Tài liệu này đã được phê duyệt'], 400);
+        try {
+            $perPage = $request->input('per_page', 10);
+            
+            $documents = Document::with(['user'])
+                ->where('is_approved', false)
+                ->orderBy('created_at', 'desc')
+                ->paginate($perPage);
+                
+            return response()->json($documents);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching pending documents: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error fetching pending documents: ' . $e->getMessage()
+            ], 500);
         }
-        
-        $document->update(['is_approved' => true]);
-        
-        // Thông báo cho người tải lên
-        $this->notificationService->sendNotification(
-            $document->user,
-            'document_approved',
-            "Tài liệu '{$document->title}' của bạn đã được phê duyệt",
-            ['document_id' => $document->id]
-        );
-        
-        return new DocumentResource($document);
     }
     
+    /**
+     * Approve a document
+     * 
+     * @param Document $document
+     * @return \Illuminate\Http\Response
+     */
+    public function approve(Document $document)
+    {
+        try {
+            if ($document->is_approved) {
+                return response()->json([
+                    'message' => 'Document is already approved'
+                ], 400);
+            }
+            
+            $document->is_approved = true;
+            $document->approved_by = Auth::id();
+            $document->approved_at = now();
+            $document->save();
+            
+            // Notify the document owner
+            if ($document->user) {
+                // Implement notification if needed
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Document approved successfully',
+                'document' => $document
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error approving document: ' . $e->getMessage(), [
+                'exception' => $e,
+                'document_id' => $document->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error approving document: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Reject a document
+     * 
+     * @param Request $request
+     * @param Document $document
+     * @return \Illuminate\Http\Response
+     */
     public function reject(Request $request, Document $document)
     {
-        $validator = Validator::make($request->all(), [
-            'reason' => 'required|string',
-        ]);
-        
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-        
-        if ($document->is_approved) {
-            $document->update(['is_approved' => false]);
-        }
-        
-        // Thông báo cho người tải lên
-        $this->notificationService->sendNotification(
-            $document->user,
-            'document_rejected',
-            "Tài liệu '{$document->title}' của bạn đã bị từ chối",
-            [
-                'document_id' => $document->id,
-                'reason' => $request->reason
-            ]
-        );
-        
-        return new DocumentResource($document);
-    }
-    
-    public function reports(Request $request)
-    {
-        $query = Report::where('reportable_type', Document::class)
-            ->with(['reportable', 'reporter'])
-            ->where('status', 'pending');
-        
-        // Sắp xếp theo mới nhất
-        $query->latest();
-        
-        // Phân trang
-        $reports = PaginationController::paginate($query, $request);
-        
-        return response()->json($reports);
-    }
-    
-    public function resolveReport(Request $request, Report $report)
-    {
-        $validator = Validator::make($request->all(), [
-            'resolution_note' => 'nullable|string',
-            'action' => 'required|in:resolve,reject',
-        ]);
-        
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-        
-        if ($report->status !== 'pending') {
-            return response()->json(['message' => 'Báo cáo này đã được xử lý'], 400);
-        }
-        
-        if ($request->action === 'resolve') {
-            $report->resolve($request->user(), $request->resolution_note);
-            
-            // Nếu báo cáo liên quan đến tài liệu, có thể thực hiện hành động bổ sung
-            if ($report->reportable_type === Document::class) {
-                $document = Document::find($report->reportable_id);
-                
-                if ($document) {
-                    // Ví dụ: Đánh dấu tài liệu là không được phê duyệt
-                    $document->update(['is_approved' => false]);
-                    
-                    // Thông báo cho người tải lên
-                    $this->notificationService->sendNotification(
-                        $document->user,
-                        'document_reported_action',
-                        "Tài liệu '{$document->title}' của bạn đã bị đánh dấu là không được phê duyệt do vi phạm",
-                        ['document_id' => $document->id]
-                    );
-                }
-            }
-        } else {
-            $report->reject($request->user(), $request->resolution_note);
-        }
-        
-        // Thông báo cho người báo cáo
-        $this->notificationService->sendNotification(
-            $report->reporter,
-            'report_processed',
-            "Báo cáo của bạn đã được xử lý",
-            ['report_id' => $report->id]
-        );
-        
-        return response()->json(['message' => 'Báo cáo đã được xử lý thành công']);
-    }
-    
-    public function delete(Request $request, Document $document)
-    {
-        // Xóa tài liệu và file liên quan
         try {
-            // Lấy bản ghi tải lên file
-            $fileUpload = $document->fileUpload;
+            $validator = Validator::make($request->all(), [
+                'reason' => 'required|string|max:500'
+            ]);
             
-            if ($fileUpload) {
-                // Sử dụng service để xóa file
-                app(FileUploadService::class)->deleteFileUpload($fileUpload);
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
             }
             
-            // Thông báo cho người tải lên
-            $this->notificationService->sendNotification(
-                $document->user,
-                'document_deleted',
-                "Tài liệu '{$document->title}' của bạn đã bị xóa bởi người kiểm duyệt",
-                ['reason' => $request->reason ?? 'Vi phạm quy định của hệ thống']
-            );
+            if ($document->is_approved) {
+                $document->is_approved = false;
+            }
             
+            $document->rejected_by = Auth::id();
+            $document->rejected_at = now();
+            $document->rejection_reason = $request->reason;
+            $document->save();
+            
+            // Notify the document owner
+            if ($document->user) {
+                // Implement notification if needed
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Document rejected successfully',
+                'document' => $document
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error rejecting document: ' . $e->getMessage(), [
+                'exception' => $e,
+                'document_id' => $document->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error rejecting document: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Delete a document
+     * 
+     * @param Document $document
+     * @return \Illuminate\Http\Response
+     */
+    public function delete(Document $document)
+    {
+        try {
+            // Store document info for logging
+            $documentInfo = [
+                'id' => $document->id,
+                'title' => $document->title,
+                'user_id' => $document->user_id
+            ];
+            
+            // Delete file from storage if exists
+            if ($document->file_path && Storage::exists($document->file_path)) {
+                Storage::delete($document->file_path);
+            }
+            
+            // Delete document record
             $document->delete();
             
-            return response()->json(['message' => 'Tài liệu đã được xóa thành công']);
+            // Log the deletion
+            \Log::info('Document deleted by moderator', [
+                'moderator_id' => Auth::id(),
+                'document' => $documentInfo
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Document deleted successfully'
+            ]);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Không thể xóa tài liệu: ' . $e->getMessage()], 500);
+            \Log::error('Error deleting document: ' . $e->getMessage(), [
+                'exception' => $e,
+                'document_id' => $document->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error deleting document: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get reports for a document
+     * 
+     * @return \Illuminate\Http\Response
+     */
+    public function reports()
+    {
+        try {
+            $reports = Report::with(['user', 'reportable'])
+                ->whereHasMorph('reportable', [Document::class])
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+                
+            return response()->json($reports);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching document reports: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error fetching document reports: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Resolve a report
+     * 
+     * @param Report $report
+     * @param Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function resolveReport(Report $report, Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'resolution' => 'required|string|max:500'
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+            
+            $report->status = 'resolved';
+            $report->resolved_by = Auth::id();
+            $report->resolution_note = $request->resolution;
+            $report->resolved_at = now();
+            $report->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Report resolved successfully',
+                'report' => $report
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error resolving report: ' . $e->getMessage(), [
+                'exception' => $e,
+                'report_id' => $report->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Error resolving report: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

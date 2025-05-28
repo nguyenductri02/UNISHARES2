@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('file_path');
             $table->string('file_type');
             $table->bigInteger('file_size');
-            $table->string('file_hash')->unique();
+            $table->string('file_hash')->index(); // Changed from unique to just indexed
             $table->string('google_drive_id')->nullable();
             $table->string('minio_key')->nullable();
             $table->string('external_url')->nullable();

@@ -7,10 +7,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\DocumentResource;
 use App\Models\Document;
 use App\Models\User;
+use App\Models\Report;
 use App\Services\FileUploadService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DocumentController extends Controller
 {
@@ -431,9 +434,8 @@ class DocumentController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
         
-        if ($document->is_approved) {
-            $document->update(['is_approved' => false]);
-        }
+        // Always update the approval status to false, regardless of current status
+        $document->update(['is_approved' => false]);
         
         // Notify the document owner
         $this->notificationService->sendNotification(
@@ -447,5 +449,286 @@ class DocumentController extends Controller
         );
         
         return new DocumentResource($document);
+    }
+    
+    /**
+     * Check if a file already exists
+     */
+    public function checkFileExists(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|max:102400', // 100MB max
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+        
+        try {
+            $fileInfo = $this->fileUploadService->checkFileExists($request->file('file'));
+            return response()->json($fileInfo);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+    
+    /**
+     * Get document download information
+     * 
+     * @param Document $document
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getDownloadInfo(Document $document)
+    {
+        // Check if user has permission to download this document
+        if (!$document->is_approved && auth()->id() !== $document->user_id && !auth()->user()->hasRole(['admin', 'moderator'])) {
+            return response()->json([
+                'message' => 'Bạn không có quyền tải xuống tài liệu này'
+            ], 403);
+        }
+        
+        // Increment download count
+        $document->incrementDownloadCount();
+        
+        // Get the file upload record
+        $fileUpload = $document->fileUpload;
+        
+        if (!$fileUpload) {
+            return response()->json([
+                'message' => 'Không tìm thấy file'
+            ], 404);
+        }
+        
+        // Return download information based on storage type
+        switch ($fileUpload->storage_type) {
+            case 'google_drive':
+                // Return download URL for Google Drive files
+                if ($fileUpload->google_drive_id) {
+                    try {
+                        $downloadUrl = $this->fileUploadService->getGoogleDriveDownloadUrl($fileUpload->google_drive_id);
+                        return response()->json([
+                            'download_url' => $downloadUrl,
+                            'filename' => $document->file_name
+                        ]);
+                    } catch (\Exception $e) {
+                        \Log::error('Google Drive download error: ' . $e->getMessage());
+                        return response()->json([
+                            'message' => 'Không thể tạo đường dẫn tải xuống từ Google Drive'
+                        ], 500);
+                    }
+                }
+                break;
+                
+            case 'minio':
+                // Return pre-signed URL for MinIO
+                if ($fileUpload->minio_key) {
+                    try {
+                        $downloadUrl = $this->fileUploadService->getMinioDownloadUrl($fileUpload->minio_key);
+                        return response()->json([
+                            'download_url' => $downloadUrl,
+                            'filename' => $document->file_name
+                        ]);
+                    } catch (\Exception $e) {
+                        \Log::error('MinIO download error: ' . $e->getMessage());
+                        return response()->json([
+                            'message' => 'Không thể tạo đường dẫn tải xuống từ MinIO'
+                        ], 500);
+                    }
+                }
+                break;
+                
+            default:
+                // For local storage, return file info with the API endpoint for secure download
+                if (!Storage::exists($fileUpload->file_path)) {
+                    return response()->json([
+                        'message' => 'Không tìm thấy file trên máy chủ'
+                    ], 404);
+                }
+                
+                // Create a token for file access (for direct links)
+                $token = null;
+                if (auth()->check()) {
+                    $token = auth()->user()->createToken('file-access')->plainTextToken;
+                }
+                
+                return response()->json([
+                    'filename' => $document->file_name,
+                    'file_type' => $document->file_type,
+                    'file_size' => $document->file_size,
+                    'direct_download' => true,
+                    'download_url' => url('/api/storage/download/' . $fileUpload->file_path) . ($token ? '?token=' . $token : ''),
+                    'view_url' => url('/api/storage/file/' . $fileUpload->file_path) . ($token ? '?token=' . $token : '')
+                ]);
+        }
+        
+        return response()->json([
+            'message' => 'Không thể xác định thông tin tải xuống'
+        ], 404);
+    }
+    
+    /**
+     * Restore a document from trash
+     * 
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function restore($id)
+    {
+        $document = Document::withTrashed()->findOrFail($id);
+        
+        // Check if user has permission to restore this document
+        if ($document->user_id !== auth()->id() && !auth()->user()->can('delete any document')) {
+            return response()->json(['message' => 'You do not have permission to restore this document'], 403);
+        }
+        
+        $document->restore();
+        
+        return response()->json([
+            'message' => 'Document restored successfully',
+            'document' => new DocumentResource($document)
+        ]);
+    }
+    
+    /**
+     * Permanently delete a document
+     * 
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function forceDelete($id)
+    {
+        $document = Document::withTrashed()->findOrFail($id);
+        
+        // Check if user has permission to delete this document
+        if ($document->user_id !== auth()->id() && !auth()->user()->can('delete any document')) {
+            return response()->json(['message' => 'You do not have permission to permanently delete this document'], 403);
+        }
+        
+        // Delete the file from storage
+        try {
+            $fileUpload = $document->fileUpload;
+            
+            if ($fileUpload) {
+                $this->fileUploadService->deleteFileUpload($fileUpload);
+            }
+        } catch (\Exception $e) {
+            // Log the error but continue with document deletion
+            \Log::error('Failed to delete file: ' . $e->getMessage());
+        }
+        
+        $document->forceDelete();
+        
+        return response()->json(['message' => 'Document permanently deleted']);
+    }
+    
+    /**
+     * Empty the trash (permanently delete all trashed documents)
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function emptyTrash(Request $request)
+    {
+        $userId = auth()->id();
+        
+        // If user is admin/moderator and has requested to empty all trash
+        if ($request->has('all') && $request->all && auth()->user()->hasRole(['admin', 'moderator'])) {
+            $documents = Document::onlyTrashed()->get();
+        } else {
+            // Only get user's own trashed documents
+            $documents = Document::onlyTrashed()->where('user_id', $userId)->get();
+        }
+        
+        $count = $documents->count();
+        
+        foreach ($documents as $document) {
+            // Delete the file from storage
+            try {
+                $fileUpload = $document->fileUpload;
+                
+                if ($fileUpload) {
+                    $this->fileUploadService->deleteFileUpload($fileUpload);
+                }
+            } catch (\Exception $e) {
+                // Log the error but continue with document deletion
+                \Log::error('Failed to delete file: ' . $e->getMessage());
+            }
+            
+            $document->forceDelete();
+        }
+        
+        return response()->json([
+            'message' => "Successfully emptied trash ($count documents deleted)",
+            'count' => $count
+        ]);
+    }
+    
+    /**
+     * Report a document for inappropriate content
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function report(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'reason' => 'required|string|max:500',
+            'details' => 'nullable|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Check if the document exists
+        $document = Document::find($id);
+        if (!$document) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tài liệu không tồn tại',
+            ], 404);
+        }
+
+        // Check if the user has already reported this document and has a pending report
+        $existingReport = Report::where('user_id', auth()->id())
+            ->where('reportable_type', Document::class)
+            ->where('reportable_id', $id)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingReport) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bạn đã báo cáo tài liệu này và báo cáo đang được xử lý',
+            ], 422);
+        }
+
+        // Create a new report
+        $report = new Report();
+        $report->user_id = auth()->id();
+        $report->reportable_type = Document::class;
+        $report->reportable_id = $id;
+        $report->reason = $request->reason;
+        $report->details = $request->details;
+        $report->status = 'pending';
+        $report->save();
+
+        // Notify administrators and moderators about the new report
+        try {
+            broadcast(new \App\Events\ReportCreated($report))->toOthers();
+        } catch (\Exception $e) {
+            // Log the error but don't fail the request
+            \Log::error('Failed to broadcast report event: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Báo cáo tài liệu đã được gửi thành công',
+            'data' => $report,
+        ], 201);
     }
 }

@@ -21,6 +21,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        \App\Http\Middleware\Cors::class, // Keep this line
     ];
 
     /**
@@ -37,15 +38,16 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\TrackUserActivity::class,
-        ],
-
-        'api' => [
+            \App\Http\Middleware\SessionTokenConsistencyMiddleware::class,
+        ],        'api' => [
+            \App\Http\Middleware\ErrorHandlingMiddleware::class, // Add error handling middleware first
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-            \Illuminate\Routing\Middleware\ThrottleRequests::class . ':api',
+            \Illuminate\Routing\Middleware\ThrottleRequests::class . ':api-expanded',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\TrackUserActivity::class,
+            \App\Http\Middleware\SessionTokenConsistencyMiddleware::class,
         ],
-    ];
+    ];    
 
     /**
      * The application's middleware aliases.
@@ -62,12 +64,24 @@ class Kernel extends HttpKernel
         'can' => \Illuminate\Auth\Middleware\Authorize::class,
         'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
         'password.confirm' => \Illuminate\Auth\Middleware\RequirePassword::class,
-        'precognitive' => \Illuminate\Foundation\Http\Middleware\HandlePrecognitiveRequests::class,
         'signed' => \App\Http\Middleware\ValidateSignature::class,
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
-        'active' => \App\Http\Middleware\CheckUserActive::class,
+        'role' => \App\Http\Middleware\CheckRole::class, // Make sure this is defined here
+        'permission' => \Spatie\Permission\Middlewares\PermissionMiddleware::class,
+        'role_or_permission' => \Spatie\Permission\Middlewares\RoleOrPermissionMiddleware::class,
+        'active' => \App\Http\Middleware\ActiveMiddleware::class,
+    ];
+
+    /**
+     * The application's route middleware.
+     *
+     * These middleware may be assigned to groups or used individually.
+     *
+     * @var array<string, class-string|string>
+     */
+    protected $routeMiddleware = [
+        // For Laravel 8+ compatibility
         'role' => \App\Http\Middleware\CheckRole::class,
-        'api.rate.limit' => \App\Http\Middleware\RateLimitApi::class,
     ];
 }

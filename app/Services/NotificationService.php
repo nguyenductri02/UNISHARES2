@@ -3,126 +3,94 @@
 namespace App\Services;
 
 use App\Models\User;
-use Illuminate\Support\Facades\Notification as NotificationFacade;
-use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Notifications\DatabaseNotification;
 
 class NotificationService
 {
     /**
-     * Send a notification to a user.
+     * Send a notification to a user
+     * 
+     * @param User|int $user The user or user ID to send the notification to
+     * @param string $type The notification type
+     * @param string $message The notification message
+     * @param array $data Additional data for the notification
+     * @return DatabaseNotification The created notification
      */
-    public function sendNotification(User $user, $notification)
+    public function sendNotification($user, string $type, string $message, array $data = []): DatabaseNotification
     {
         try {
-            NotificationFacade::send($user, $notification);
+            // If $user is an ID, get the user model
+            if (is_numeric($user)) {
+                $user = User::findOrFail($user);
+            }
             
-            // Broadcast the notification to WebSocket
-            $this->broadcastNotification($user, $notification);
+            // Laravel's built-in notification system uses the notifiable_* columns
+            $notificationData = array_merge(['message' => $message], $data);
             
-            return true;
+            $notification = $user->notifications()->create([
+                'id' => \Illuminate\Support\Str::uuid()->toString(),
+                'type' => $type,
+                'data' => json_encode($notificationData),
+            ]);
+            
+            // Here you could add code to push the notification
+            // through WebSockets, Firebase, or any other real-time service
+            
+            return $notification;
         } catch (\Exception $e) {
             Log::error('Failed to send notification: ' . $e->getMessage());
-            return false;
+            throw $e;
         }
     }
-
+    
     /**
-     * Send a notification to multiple users.
+     * Send a notification to multiple users
+     * 
+     * @param array $users Array of User models or user IDs
+     * @param string $type The notification type
+     * @param string $message The notification message
+     * @param array $data Additional data for the notification
+     * @return array Array of created notifications
      */
-    public function sendNotificationToMultipleUsers($users, $notification)
+    public function sendNotificationToMany(array $users, string $type, string $message, array $data = []): array
     {
-        try {
-            NotificationFacade::send($users, $notification);
-            
-            // Broadcast the notification to WebSocket for each user
-            foreach ($users as $user) {
-                $this->broadcastNotification($user, $notification);
+        $notifications = [];
+        
+        foreach ($users as $user) {
+            try {
+                $notifications[] = $this->sendNotification($user, $type, $message, $data);
+            } catch (\Exception $e) {
+                $userId = is_numeric($user) ? $user : $user->id;
+                Log::error('Failed to send notification to user ' . $userId . ': ' . $e->getMessage());
+                // Continue with other users even if one fails
+                continue;
             }
-            
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Failed to send notification to multiple users: ' . $e->getMessage());
-            return false;
         }
+        
+        return $notifications;
     }
-
+    
     /**
-     * Broadcast a notification to WebSocket.
+     * Mark a notification as read
+     * 
+     * @param DatabaseNotification $notification The notification to mark as read
+     * @return DatabaseNotification The updated notification
      */
-    protected function broadcastNotification(User $user, $notification)
+    public function markAsRead(DatabaseNotification $notification): DatabaseNotification
     {
-        try {
-            // Get the notification data
-            $notificationData = $notification->toArray($user);
-            
-            // Broadcast to the user's private channel
-            broadcast(new \App\Events\NotificationSent($user, $notificationData))->toOthers();
-            
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Failed to broadcast notification: ' . $e->getMessage());
-            return false;
-        }
+        $notification->markAsRead();
+        return $notification;
     }
-
+    
     /**
-     * Mark a notification as read.
+     * Mark all notifications as read for a user
+     * 
+     * @param User $user The user whose notifications should be marked as read
+     * @return int The number of updated notifications
      */
-    public function markAsRead(User $user, $notificationId)
+    public function markAllAsRead(User $user): int
     {
-        try {
-            $notification = DatabaseNotification::where('id', $notificationId)
-                ->where('notifiable_id', $user->id)
-                ->where('notifiable_type', get_class($user))
-                ->first();
-            
-            if ($notification) {
-                $notification->markAsRead();
-                return true;
-            }
-            
-            return false;
-        } catch (\Exception $e) {
-            Log::error('Failed to mark notification as read: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Mark all notifications as read for a user.
-     */
-    public function markAllAsRead(User $user)
-    {
-        try {
-            $user->unreadNotifications->markAsRead();
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Failed to mark all notifications as read: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Delete a notification.
-     */
-    public function deleteNotification(User $user, $notificationId)
-    {
-        try {
-            $notification = DatabaseNotification::where('id', $notificationId)
-                ->where('notifiable_id', $user->id)
-                ->where('notifiable_type', get_class($user))
-                ->first();
-            
-            if ($notification) {
-                $notification->delete();
-                return true;
-            }
-            
-            return false;
-        } catch (\Exception $e) {
-            Log::error('Failed to delete notification: ' . $e->getMessage());
-            return false;
-        }
+        return $user->unreadNotifications()->update(['read_at' => now()]);
     }
 }

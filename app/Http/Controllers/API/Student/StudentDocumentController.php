@@ -22,6 +22,8 @@ class StudentDocumentController extends Controller
     {
         $this->fileUploadService = $fileUploadService;
         $this->notificationService = $notificationService;
+        
+        // Use auth:sanctum middleware first, then the Spatie role middleware
         $this->middleware('auth:sanctum');
         $this->middleware('role:student');
     }
@@ -88,6 +90,20 @@ class StudentDocumentController extends Controller
         
         // Upload file
         try {
+            // First check if this file already exists
+            $fileExists = $this->fileUploadService->checkFileExists($request->file('file'));
+            
+            if ($fileExists['exists'] && $fileExists['document_id']) {
+                // If the user is trying to upload a file that already exists
+                // We can either return an error or link to the existing document
+                return response()->json([
+                    'message' => 'Tài liệu đã tồn tại trong hệ thống',
+                    'document' => $fileExists['document'],
+                    'document_id' => $fileExists['document_id']
+                ], 200);
+            }
+            
+            // If we get here, either the file doesn't exist or it exists but isn't linked to a document
             $fileUpload = $this->fileUploadService->uploadFile(
                 $request->file('file'),
                 $request->user()->id,
@@ -109,6 +125,11 @@ class StudentDocumentController extends Controller
                 'is_official' => false, // Sinh viên không thể tạo tài liệu chính thức
                 'is_approved' => false, // Cần được phê duyệt
             ]);
+            
+            // Link the file upload to the document
+            $fileUpload->uploadable_id = $document->id;
+            $fileUpload->uploadable_type = Document::class;
+            $fileUpload->save();
             
             // Phát sóng sự kiện tải lên tài liệu
             broadcast(new DocumentUploaded($document))->toOthers();
@@ -271,5 +292,37 @@ class StudentDocumentController extends Controller
         }
         
         return response()->json(['message' => 'Báo cáo đã được gửi thành công']);
+    }
+
+    /**
+     * Get trashed documents for the current user
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\Resources\Json\ResourceCollection
+     */
+    public function trashedDocuments(Request $request)
+    {
+        // Get only trashed documents that belong to the current user
+        $query = Document::onlyTrashed()
+            ->where('user_id', $request->user()->id);
+        
+        // Apply any additional filters if needed
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhere('subject', 'like', "%{$search}%")
+                  ->orWhere('course_code', 'like', "%{$search}%");
+            });
+        }
+        
+        // Sort by deletion date by default
+        $query->orderBy('deleted_at', 'desc');
+        
+        // Paginate the results
+        $documents = PaginationController::paginate($query, $request);
+        
+        return DocumentResource::collection($documents);
     }
 }

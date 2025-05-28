@@ -26,8 +26,27 @@ class Report extends Model
         'resolved_at' => 'datetime',
     ];
 
+    // Allow all reports to be visible to both admins and moderators
+    protected static function booted()
+    {
+        static::addGlobalScope('visibleToModerators', function ($builder) {
+            // No restriction for moderators or admins
+            if (auth()->check() && (auth()->user()->hasRole('moderator') || auth()->user()->hasRole('admin'))) {
+                return $builder;
+            }
+            
+            // For other users, restrict to their own reports
+            if (auth()->check()) {
+                return $builder->where('user_id', auth()->id());
+            }
+            
+            // No access for guests
+            return $builder->whereRaw('1 = 0');
+        });
+    }
+
     /**
-     * Lấy người dùng báo cáo
+     * Get the user who reported.
      */
     public function user()
     {
@@ -35,7 +54,15 @@ class Report extends Model
     }
 
     /**
-     * Lấy người dùng xử lý báo cáo
+     * Get the reportable item.
+     */
+    public function reportable()
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Get the user who resolved the report.
      */
     public function resolver()
     {
@@ -43,10 +70,77 @@ class Report extends Model
     }
 
     /**
-     * Lấy đối tượng báo cáo
+     * Override the toArray method to include reportable info if it exists
      */
-    public function reportable()
+    public function toArray()
     {
-        return $this->morphTo();
+        $array = parent::toArray();
+        
+        // Include the short name of the reportable type for easier frontend processing
+        if (!empty($this->reportable_type)) {
+            $array['reportable_type_name'] = class_basename($this->reportable_type);
+        }
+        
+        return $array;
+    }
+
+    /**
+     * Scope query to only include pending reports.
+     */
+    public function scopePending($query)
+    {
+        return $query->where('status', 'pending');
+    }
+
+    /**
+     * Scope query to only include resolved reports.
+     */
+    public function scopeResolved($query)
+    {
+        return $query->where('status', 'resolved');
+    }
+
+    /**
+     * Scope query to only include rejected reports.
+     */
+    public function scopeRejected($query)
+    {
+        return $query->where('status', 'rejected');
+    }
+
+    /**
+     * Mark report as resolved
+     */
+    public function resolve($user, $note = null)
+    {
+        $this->status = 'resolved';
+        $this->resolved_by = $user->id;
+        $this->resolution_note = $note;
+        $this->resolved_at = now();
+        $this->save();
+
+        return $this;
+    }
+
+    /**
+     * Mark report as rejected
+     */
+    public function reject($user, $note = null)
+    {
+        $this->status = 'rejected';
+        $this->resolved_by = $user->id;
+        $this->resolution_note = $note;
+        $this->resolved_at = now();
+        $this->save();
+
+        return $this;
+    }
+
+    /**
+     * Get reports for moderator dashboard - explicitly visible to moderators
+     */
+    public static function getForModerator()
+    {
+        return self::withoutGlobalScopes()->orderBy('created_at', 'desc');
     }
 }

@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Post extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -15,14 +16,12 @@ class Post extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'content',
+        'title',
         'user_id',
         'group_id',
-        'title',
-        'content',
-        'is_approved',
-        'like_count',
-        'comment_count',
-        'share_count',
+        'is_pinned',
+        'is_announcement',
     ];
 
     /**
@@ -31,22 +30,20 @@ class Post extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'is_approved' => 'boolean',
-        'like_count' => 'integer',
-        'comment_count' => 'integer',
-        'share_count' => 'integer',
+        'is_pinned' => 'boolean',
+        'is_announcement' => 'boolean',
     ];
 
     /**
      * Get the user who created the post.
      */
-    public function user()
+    public function author()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     /**
-     * Get the group that the post belongs to.
+     * Get the group that owns the post.
      */
     public function group()
     {
@@ -78,22 +75,6 @@ class Post extends Model
     }
 
     /**
-     * Get the reports for this post.
-     */
-    public function reports()
-    {
-        return $this->morphMany(Report::class, 'reportable');
-    }
-
-    /**
-     * Check if the post is liked by a specific user.
-     */
-    public function isLikedBy(User $user)
-    {
-        return $this->likes()->where('user_id', $user->id)->exists();
-    }
-
-    /**
      * Increment the like count.
      */
     public function incrementLikeCount()
@@ -107,29 +88,5 @@ class Post extends Model
     public function decrementLikeCount()
     {
         $this->decrement('like_count');
-    }
-
-    /**
-     * Increment the comment count.
-     */
-    public function incrementCommentCount()
-    {
-        $this->increment('comment_count');
-    }
-
-    /**
-     * Decrement the comment count.
-     */
-    public function decrementCommentCount()
-    {
-        $this->decrement('comment_count');
-    }
-
-    /**
-     * Increment the share count.
-     */
-    public function incrementShareCount()
-    {
-        $this->increment('share_count');
     }
 }

@@ -4,18 +4,21 @@ namespace App\Http\Controllers\API\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Models\Role;
+use Spatie\Permission\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UserManagementController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth:sanctum');
-        $this->middleware('role:admin');
+        // Debug middleware being applied
+        Log::info('UserManagementController initialized with auth:sanctum middleware');
     }
 
     /**
@@ -23,51 +26,86 @@ class UserManagementController extends Controller
      */
     public function index(Request $request)
     {
-        $query = User::query();
-        
-        // Tìm kiếm
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('student_id', 'like', "%{$search}%");
-            });
+        try {
+            Log::info('UserManagementController@index called', [
+                'user_id' => auth()->id(),
+                'is_admin' => auth()->user()->hasRole('admin')
+            ]);
+            
+            // Ensure user has admin role
+            if (!auth()->user()->hasRole('admin')) {
+                Log::warning('Non-admin access attempt to UserManagementController@index', [
+                    'user_id' => auth()->id(),
+                    'roles' => auth()->user()->getRoleNames()->toArray()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access. Admin role required.',
+                ], 403);
+            }
+
+            $query = User::with('roles');
+
+            // Tìm kiếm
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%")
+                      ->orWhere('student_id', 'like', "%{$search}%");
+                });
+            }
+            
+            // Lọc theo vai trò
+            if ($request->has('role')) {
+                $roleFilter = $request->role;
+                if ($roleFilter) {
+                    $query->whereHas('roles', function ($q) use ($roleFilter) {
+                        $q->where('name', $roleFilter);
+                    });
+                }
+            }
+            
+            // Lọc theo trạng thái
+            if ($request->has('is_active')) {
+                $query->where('is_active', $request->is_active === 'true');
+            }
+            
+            // Lọc theo trường đại học
+            if ($request->has('university')) {
+                $query->where('university', 'like', "%{$request->university}%");
+            }
+            
+            // Lọc theo khoa
+            if ($request->has('department')) {
+                $query->where('department', 'like', "%{$request->department}%");
+            }
+            
+            // Sắp xếp
+            $sortBy = $request->input('sort_by', 'created_at');
+            $sortOrder = $request->input('sort_order', 'desc');
+            $query->orderBy($sortBy, $sortOrder);
+            
+            // Phân trang
+            $perPage = $request->input('per_page', 15);
+            $users = $query->paginate($perPage);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $users,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in UserManagementController@index', [
+                'exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve users: ' . $e->getMessage(),
+            ], 500);
         }
-        
-        // Lọc theo vai trò
-        if ($request->has('role')) {
-            $query->where('role', $request->role);
-        }
-        
-        // Lọc theo trạng thái
-        if ($request->has('is_active')) {
-            $query->where('is_active', $request->is_active === 'true');
-        }
-        
-        // Lọc theo trường đại học
-        if ($request->has('university')) {
-            $query->where('university', 'like', "%{$request->university}%");
-        }
-        
-        // Lọc theo khoa
-        if ($request->has('department')) {
-            $query->where('department', 'like', "%{$request->department}%");
-        }
-        
-        // Sắp xếp
-        $sortBy = $request->input('sort_by', 'created_at');
-        $sortOrder = $request->input('sort_order', 'desc');
-        $query->orderBy($sortBy, $sortOrder);
-        
-        // Phân trang
-        $perPage = $request->input('per_page', 15);
-        $users = $query->paginate($perPage);
-        
-        return response()->json([
-            'success' => true,
-            'data' => $users,
-        ]);
     }
 
     /**
@@ -104,6 +142,8 @@ class UserManagementController extends Controller
         $user->is_active = $request->has('is_active') ? $request->is_active : true;
         $user->save();
 
+        $user->assignRole($request->role);
+
         return response()->json([
             'success' => true,
             'message' => 'Người dùng đã được tạo thành công',
@@ -116,7 +156,7 @@ class UserManagementController extends Controller
      */
     public function show($id)
     {
-        $user = User::with(['documents', 'posts', 'groups'])->findOrFail($id);
+        $user = User::with(['documents', 'posts', 'groups', 'roles'])->findOrFail($id);
         
         // Thống kê hoạt động
         $activityStats = [
@@ -219,32 +259,47 @@ class UserManagementController extends Controller
     public function updateRole(Request $request, $id)
     {
         $user = User::findOrFail($id);
-        
+
         $validator = Validator::make($request->all(), [
-            'role' => 'required|string|in:student,lecturer,moderator,admin',
+            'role' => ['required', 'string', Rule::exists('roles', 'name')],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
+                'message' => 'Validation errors',
                 'errors' => $validator->errors(),
             ], 422);
         }
 
-        $user->role = $request->role;
-        $user->save();
+        $roleName = $request->role;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Vai trò người dùng đã được cập nhật thành công',
-            'data' => $user,
-        ]);
+        try {
+            DB::beginTransaction();
+            $user->syncRoles([$roleName]);
+            DB::commit();
+
+            $user->load('roles');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Vai trò người dùng đã được cập nhật thành công.',
+                'data' => $user,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error("Role update failed for user {$id} to role {$roleName}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Không thể cập nhật vai trò người dùng: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
      * Cấm người dùng
      */
-    public function ban(Request $request, $id)
+    public function banUser(Request $request, $id)
     {
         $user = User::findOrFail($id);
         
@@ -326,17 +381,50 @@ class UserManagementController extends Controller
      */
     public function roles()
     {
-        $roles = [
-            ['value' => 'student', 'label' => 'Sinh viên'],
-            ['value' => 'lecturer', 'label' => 'Giảng viên'],
-            ['value' => 'moderator', 'label' => 'Người kiểm duyệt'],
-            ['value' => 'admin', 'label' => 'Quản trị viên'],
-        ];
-        
-        return response()->json([
-            'success' => true,
-            'data' => $roles,
-        ]);
+        try {
+            $roles = Role::all()->map(function ($role) {
+                $label = ucfirst($role->name);
+                switch ($role->name) {
+                    case 'admin':
+                        $label = 'Quản trị viên';
+                        break;
+                    case 'moderator':
+                        $label = 'Người kiểm duyệt';
+                        break;
+                    case 'lecturer':
+                        $label = 'Giảng viên';
+                        break;
+                    case 'student':
+                        $label = 'Sinh viên';
+                        break;
+                }
+                return ['value' => $role->name, 'label' => $label];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $roles,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in UserManagementController@roles', [
+                'exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Fallback to default roles if error
+            $defaultRoles = [
+                ['value' => 'admin', 'label' => 'Quản trị viên'],
+                ['value' => 'moderator', 'label' => 'Người kiểm duyệt'],
+                ['value' => 'lecturer', 'label' => 'Giảng viên'],
+                ['value' => 'student', 'label' => 'Sinh viên']
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $defaultRoles,
+                'error_info' => 'Using default roles due to error: ' . $e->getMessage()
+            ]);
+        }
     }
 
     /**

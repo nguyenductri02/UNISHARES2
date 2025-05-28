@@ -10,6 +10,13 @@ class AIChat extends Model
     use HasFactory;
 
     /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'ai_chats';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
@@ -33,6 +40,6 @@ class AIChat extends Model
      */
     public function messages()
     {
-        return $this->hasMany(AIChatMessage::class);
+        return $this->hasMany(AIChatMessage::class, 'ai_chat_id', 'id');
     }
 }

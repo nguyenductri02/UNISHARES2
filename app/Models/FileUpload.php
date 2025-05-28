@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class FileUpload extends Model
 {
@@ -92,5 +93,40 @@ class FileUpload extends Model
     public function allChunksReceived()
     {
         return $this->chunks_total === $this->chunks_received;
+    }
+
+    /**
+     * Get the public URL of the file
+     *
+     * @return string|null
+     */
+    public function getPublicUrl()
+    {
+        if ($this->storage_type === 'local') {
+            // Check if the file is in a public directory
+            if (strpos($this->file_path, 'public/') === 0) {
+                // Return the URL using the Storage facade
+                return Storage::url(str_replace('public/', '', $this->file_path));
+            } else {
+                // For files in private directory, normalize the path for the API endpoint
+                $path = $this->file_path;
+                
+                // Remove 'private/' prefix if present for API URL
+                if (strpos($path, 'private/') === 0) {
+                    $path = substr($path, 8);
+                }
+                
+                // Return a URL that will be handled by our StorageController
+                return url('/api/storage/file/' . $path);
+            }
+        } elseif ($this->storage_type === 'google_drive' && $this->google_drive_id) {
+            // Return Google Drive URL
+            return "https://drive.google.com/file/d/{$this->google_drive_id}/view";
+        } elseif ($this->storage_type === 'minio' && $this->minio_key) {
+            // Return MinIO URL if available
+            return $this->external_url;
+        }
+        
+        return null;
     }
 }

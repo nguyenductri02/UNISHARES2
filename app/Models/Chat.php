@@ -22,6 +22,7 @@ class Chat extends Model
         'is_group',
         'description',
         'avatar',
+        'group_id',
     ];
 
     /**
@@ -175,5 +176,13 @@ class Chat extends Model
         }
 
         return $participant->unreadCount();
+    }
+
+    /**
+     * Get the group that owns the chat.
+     */
+    public function group()
+    {
+        return $this->belongsTo(Group::class);
     }
 }

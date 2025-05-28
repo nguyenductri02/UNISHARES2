@@ -28,6 +28,7 @@ return [
             'table' => 'password_reset_tokens',
             'expire' => 60,
             'throttle' => 60,
+            'reset_url' => env('FRONTEND_URL') . '/reset-password?token={token}&email={email}',
         ],
     ],
 ];

@@ -56,6 +56,15 @@ class AIChatController extends Controller
         
         $messages = $aiChat->messages()->orderBy('created_at')->get();
         
+        // Add user information to user messages
+        $user = request()->user();
+        $messages = $messages->map(function ($message) use ($user) {
+            if ($message->role === 'user') {
+                $message->user = $user;
+            }
+            return $message;
+        });
+        
         return response()->json([
             'chat' => $aiChat,
             'messages' => $messages,
@@ -151,6 +160,9 @@ class AIChatController extends Controller
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->openaiApiKey,
                 'Content-Type' => 'application/json',
+            ])->withOptions([
+                'verify' => false, // Disable SSL verification for development
+                'timeout' => 30,
             ])->post('https://api.openai.com/v1/chat/completions', [
                 'model' => $aiChat->model,
                 'messages' => $previousMessages,
@@ -167,6 +179,9 @@ class AIChatController extends Controller
                     'role' => 'assistant',
                     'content' => $aiResponse,
                 ]);
+                
+                // Add user information to user message
+                $userMessage->user = $request->user();
                 
                 return response()->json([
                     'user_message' => $userMessage,

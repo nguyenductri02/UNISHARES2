@@ -36,6 +36,7 @@ class Group extends Model
     protected $casts = [
         'requires_approval' => 'boolean',
         'member_count' => 'integer',
+        'type' => 'string',  // Explicitly cast type to string
     ];
 
     /**
@@ -44,6 +45,15 @@ class Group extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    /**
+     * Alias for creator method to make it compatible with reportable interface.
+     * This ensures that the 'user' relationship works across all reportable types.
+     */
+    public function user()
+    {
+        return $this->creator();
     }
 
     /**
@@ -112,5 +122,76 @@ class Group extends Model
     {
         return $this->members()
             ->wherePivot('status', 'pending');
+    }
+
+    /**
+     * Xóa thành viên khỏi nhóm một cách an toàn
+     * Phương thức này ngăn chặn việc xóa cascade gây ảnh hưởng đến bản ghi User
+     * 
+     * @param int $userId ID của người dùng cần xóa khỏi nhóm
+     * @return bool Kết quả của thao tác xóa
+     */
+    public function safeRemoveMember($userId)
+    {
+        // Detach thay vì delete để tránh các vấn đề với ràng buộc khóa ngoại
+        $result = $this->members()->detach($userId);
+        
+        // Cập nhật số lượng thành viên nếu có sự thay đổi
+        if ($result > 0) {
+            $this->decrement('member_count');
+        }
+        
+        return $result > 0;
+    }
+
+    /**
+     * Get the "is_private" accessor - for backward compatibility
+     *
+     * @return bool
+     */
+    public function getIsPrivateAttribute()
+    {
+        return $this->requires_approval === true || $this->type === 'private';
+    }
+
+    /**
+     * Set the "is_private" attribute - for backward compatibility
+     *
+     * @param bool $value
+     * @return void
+     */
+    public function setIsPrivateAttribute($value)
+    {
+        $this->attributes['requires_approval'] = (bool)$value;
+    }
+
+    /**
+     * Scope a query to only include private groups.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopePrivate($query)
+    {
+        return $query->where('requires_approval', true)
+                    ->orWhere('type', 'private');
+    }
+
+    /**
+     * Scope a query to only include public groups.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopePublic($query)
+    {
+        return $query->where(function($q) {
+            $q->where('requires_approval', false)
+               ->orWhereNull('requires_approval');
+        })
+        ->where(function($q) {
+            $q->where('type', '!=', 'private')
+               ->orWhereNull('type');
+        });
     }
 }

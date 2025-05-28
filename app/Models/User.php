@@ -5,9 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Traits\HasRoles;
 use Laravel\Sanctum\HasApiTokens;
-    
+use Spatie\Permission\Traits\HasRoles;
+
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
@@ -20,16 +20,18 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
-        'phone',
         'password',
+        'phone',
+        'avatar',
+        'bio',
         'university',
         'department',
         'student_id',
-        'bio',
-        'avatar',
         'is_active',
+        'ban_reason',
+        'banned_at',
         'last_login_at',
-        'email_verified_at',
+        'last_activity_at',
     ];
 
     /**
@@ -51,7 +53,9 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'is_active' => 'boolean',
+        'banned_at' => 'datetime',
         'last_login_at' => 'datetime',
+        'last_activity_at' => 'datetime',
     ];
 
     /**
@@ -144,6 +148,27 @@ class User extends Authenticatable
     public function aiChats()
     {
         return $this->hasMany(AIChat::class);
+    }
+
+    /**
+     * Get user authentication logs.
+     */
+    public function authentications()
+    {
+        return $this->hasMany(UserAuthentication::class);
+    }
+
+    /**
+     * Get the role of the user as a string (compatibility function)
+     *
+     * @return string
+     */
+    public function getRoleAttribute()
+    {
+        if ($this->roles()->count() > 0) {
+            return $this->roles()->first()->name;
+        }
+        return 'student'; // Default role
     }
 
     /**

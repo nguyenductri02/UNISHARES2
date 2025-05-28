@@ -45,17 +45,36 @@ class MessageSent implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
+        // Load attachments if they're not already loaded
+        if (!$this->message->relationLoaded('attachments')) {
+            $this->message->load('attachments');
+        }
+        
+        // Load user if not already loaded
+        if (!$this->message->relationLoaded('user')) {
+            $this->message->load('user');
+        }
+        
         return [
             'id' => $this->message->id,
+            'chat_id' => $this->message->chat_id,
             'content' => $this->message->content,
             'user' => [
                 'id' => $this->message->user->id,
                 'name' => $this->message->user->name,
-                'avatar' => $this->message->user->avatar,
+                'avatar' => $this->message->user->avatar ? url('storage/' . $this->message->user->avatar) : null,
             ],
-            'attachment_path' => $this->message->attachment_path,
-            'attachment_type' => $this->message->attachment_type,
+            'attachments' => $this->message->attachments->map(function ($attachment) {
+                return [
+                    'id' => $attachment->id,
+                    'file_name' => $attachment->file_name,
+                    'file_path' => url('storage/' . $attachment->file_path),
+                    'file_size' => $attachment->file_size,
+                    'file_type' => $attachment->file_type,
+                ];
+            }),
             'created_at' => $this->message->created_at->toIso8601String(),
+            'updated_at' => $this->message->updated_at->toIso8601String(),
         ];
     }
 }

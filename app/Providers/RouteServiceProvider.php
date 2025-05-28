@@ -14,25 +14,38 @@ class RouteServiceProvider extends ServiceProvider
      * The path to your application's "home" route.
      *
      * Typically, users are redirected here after authentication.
+     *
+     * @var string
      */
-    public const HOME = '/home';
+    public const HOME = '/dashboard';
 
     /**
      * Define your route model bindings, pattern filters, and other route configuration.
-     */
-    public function boot(): void
+     */    public function boot(): void
     {
-        RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
-        });
+        $this->configureRateLimiting();
 
         $this->routes(function () {
-            Route::middleware('api')
+            // Ensure CORS middleware is applied to all API routes
+            Route::middleware(['api', 'cors'])
                 ->prefix('api')
                 ->group(base_path('routes/api.php'));
 
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
+        });
+    }
+    
+    /**
+     * Configure the rate limiters for the application.
+     */    protected function configureRateLimiting()
+    {
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(180)->by($request->user()?->id ?: $request->ip());
+        });
+        
+        RateLimiter::for('api-expanded', function (Request $request) {
+            return Limit::perMinute(300)->by($request->user()?->id ?: $request->ip());
         });
     }
 }

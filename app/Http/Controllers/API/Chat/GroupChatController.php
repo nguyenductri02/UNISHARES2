@@ -10,6 +10,8 @@ use App\Models\Group;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class GroupChatController extends Controller
 {
@@ -191,8 +193,9 @@ class GroupChatController extends Controller
             return response()->json(['message' => 'You are not a participant in this chat'], 403);
         }
         
-        // Remove the user from the chat
-        $chat->participants()->where('user_id', $request->user()->id)->delete();
+        // FIX: Sử dụng detach thay vì delete để tránh xóa cascade có thể ảnh hưởng đến tài khoản
+        $userId = $request->user()->id;
+        $chat->users()->detach($userId);
         
         // If no participants left, delete the chat
         if ($chat->participants()->count() === 0) {
@@ -222,8 +225,9 @@ class GroupChatController extends Controller
         // Delete all messages in the chat
         $chat->messages()->delete();
         
-        // Delete all participants
-        $chat->participants()->delete();
+        // FIX: Sử dụng detach thay vì delete để tránh xóa cascade có thể ảnh hưởng đến tài khoản
+        // Detach tất cả người dùng khỏi chat
+        $chat->users()->detach();
         
         // Delete the chat
         $chat->delete();
@@ -233,37 +237,148 @@ class GroupChatController extends Controller
     
     public function createFromGroup(Request $request, Group $group)
     {
-        // Check if user is a member of the group
-        $isMember = $group->members()->where('user_id', $request->user()->id)->exists();
-        
-        if (!$isMember) {
-            return response()->json(['message' => 'You are not a member of this group'], 403);
-        }
-        
-        // Check if a chat already exists for this group
-        $existingChat = Chat::where('group_id', $group->id)->first();
-        
-        if ($existingChat) {
-            return new ChatResource($existingChat->load('participants.user'));
-        }
-        
-        // Create a new chat for the group
-        $chat = Chat::create([
-            'name' => $group->name . ' Chat',
-            'type' => 'group',
-            'group_id' => $group->id,
-        ]);
-        
-        // Add all group members as participants
-        $members = $group->members()->get();
-        
-        foreach ($members as $member) {
-            ChatParticipant::create([
-                'chat_id' => $chat->id,
-                'user_id' => $member->user_id,
+        try {
+            // Log the request for debugging
+            Log::info('Creating chat for group', ['group_id' => $group->id, 'user_id' => $request->user()->id]);
+            
+            // Check if user is a member of the group
+            $isMember = $group->members()->where('user_id', $request->user()->id)->exists();
+            
+            if (!$isMember) {
+                Log::warning('User not a member of group', ['user_id' => $request->user()->id, 'group_id' => $group->id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not a member of this group'
+                ], 403);
+            }
+            
+            // Check if a chat already exists for this group
+            $existingChat = Chat::where('group_id', $group->id)->first();
+            
+            if ($existingChat) {
+                Log::info('Chat already exists for group', ['chat_id' => $existingChat->id, 'group_id' => $group->id]);
+                // Load participants before returning the chat
+                $existingChat->load('participants.user');
+                return response()->json([
+                    'success' => true,
+                    'data' => $existingChat
+                ]);
+            }
+            
+            // Create a new chat for the group
+            $chat = new Chat();
+            $chat->name = $group->name . ' Chat';
+            $chat->type = 'group';
+            $chat->is_group = true;
+            $chat->group_id = $group->id;
+            
+            // Check if the created_by column exists in the chats table using Schema
+            if (Schema::hasColumn('chats', 'created_by')) {
+                $chat->created_by = $request->user()->id;
+            }
+            
+            $chat->save();
+            
+            Log::info('Created new chat for group', ['chat_id' => $chat->id, 'group_id' => $group->id]);
+            
+            // Add all group members as participants
+            $members = $group->members()->get();
+            
+            foreach ($members as $member) {
+                try {
+                    ChatParticipant::create([
+                        'chat_id' => $chat->id,
+                        'user_id' => $member->user_id,
+                        'is_admin' => $member->role === 'admin',
+                        'joined_at' => now()
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to add member to chat', [
+                        'chat_id' => $chat->id,
+                        'user_id' => $member->user_id,
+                        'error' => $e->getMessage()
+                    ]);
+                    // Continue with other members even if one fails
+                }
+            }
+            
+            // Load participants after creating them
+            $chat->load('participants.user');
+            
+            return response()->json([
+                'success' => true,
+                'data' => $chat
             ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error creating chat from group', [
+                'group_id' => $group->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create chat: ' . $e->getMessage()
+            ], 500);
         }
-        
-        return new ChatResource($chat->load('participants.user'));
+    }
+
+    public function getGroupChat(Request $request, Group $group)
+    {
+        try {
+            // Check if user is a member of the group
+            $isMember = $group->members()->where('user_id', $request->user()->id)->exists();
+            $isAdmin = $request->user()->hasRole(['admin', 'moderator']);
+            
+            if (!$isMember && !$isAdmin) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not a member of this group'
+                ], 403);
+            }
+            
+            // Get existing chat or return null
+            $chat = Chat::where('group_id', $group->id)->first();
+            
+            if (!$chat) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No chat found for this group',
+                    'data' => null
+                ]);
+            }
+            
+            // Check if user is a participant
+            $isParticipant = $chat->participants()->where('user_id', $request->user()->id)->exists();
+            
+            if (!$isParticipant && !$isAdmin) {
+                // Add user as participant if they are a group member but not a chat participant
+                $chat->participants()->create([
+                    'user_id' => $request->user()->id,
+                    'is_admin' => false,
+                    'joined_at' => now()
+                ]);
+            }
+            
+            // Load participant relationships
+            $chat->load('participants.user');
+            
+            return response()->json([
+                'success' => true,
+                'data' => $chat
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error retrieving group chat', [
+                'group_id' => $group->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve chat: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
